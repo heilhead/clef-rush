@@ -1,0 +1,12 @@
+{
+  "header": "none",
+  "footer": "none",
+  "adjustPageWidth": true,
+  "adjustPageHeight": true,
+  "svgBoundingBoxes": true,
+  "svgFormatRaw": true,
+  "svgHtml5": true,
+  "svgRemoveXlink": true,
+  "svgViewBox": true,
+  "svgAdditionalAttribute": ["note@pname", "note@oct"]
+}
