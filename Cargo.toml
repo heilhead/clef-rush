@@ -18,3 +18,7 @@ tracing-wasm = "0.2"
 tap = "1.0"
 wasm-timer = "0.2"
 instant = { version = "0.1.13", features = ["wasm-bindgen"] }
+midir = "0.10"
+web-sys = "0.3"
+js-sys = "0.3"
+midly = "0.5"
