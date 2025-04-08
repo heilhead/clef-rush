@@ -1,6 +1,7 @@
 use {
     derive_more::From,
     iced::{Element, Subscription, Task, Theme, widget},
+    input::PortDescriptor,
     midly::MidiMessage,
     tap::TapFallible as _,
     wasm_bindgen::prelude::*,
@@ -16,34 +17,6 @@ pub async fn main() {
     tracing_wasm::set_as_global_default();
 
     // modal, pick_list, loading_spinners, layout, checkbox
-
-    // // _conn_in needs to be a named parameter, because it needs to be kept alive
-    // // until the end of the scope
-    // let _conn_in = midi_in
-    //     .connect(
-    //         in_port,
-    //         "midir-read-input",
-    //         move |stamp, message, _| {
-    //             tracing::info!("{}: {:?} (len = {})", stamp, message,
-    // message.len());
-
-    //             // TODO: Some keyboards send NoteOn event with vel 0 instead of
-    // NoteOff.             let event = LiveEvent::parse(message).unwrap();
-    //             match event {
-    //                 LiveEvent::Midi { channel, message } => match message {
-    //                     MidiMessage::NoteOn { key, vel } => {
-    //                         tracing::info!(?key, ?vel, ?channel, "hit note");
-    //                     }
-    //                     _ => {}
-    //                 },
-    //                 _ => {}
-    //             }
-    //         },
-    //         (),
-    //     )
-    //     .unwrap();
-
-    // Box::leak(Box::new(_conn_in));
 
     iced::application("Piano Trainer", App::update, App::view)
         .subscription(App::subscription)
@@ -70,29 +43,46 @@ impl LoadingState {
     }
 }
 
-struct MainMenuState {}
+struct MainMenuState {
+    input_ports: Vec<PortDescriptor>,
+    input_port: Option<PortDescriptor>,
+}
 
 impl MainMenuState {
     fn new() -> Self {
-        Self {}
+        Self {
+            input_ports: Vec::new(),
+            input_port: None,
+        }
     }
 
     fn update(&mut self, event: GlobalEvent) -> Task<GlobalEvent> {
+        match event {
+            GlobalEvent::RefreshDeviceList => {
+                self.input_ports = input::available_ports();
+            }
+
+            GlobalEvent::SelectInputPort(port) => {
+                self.input_port = Some(port);
+            }
+
+            _ => {}
+        }
+
         Task::none()
     }
 
     fn view<'a>(&'a self, app: &'a App) -> Element<'a, GlobalEvent> {
-        let input = app.input();
-
-        let device_selector = widget::pick_list(input.ports(), input.port(), |port| {
-            input::Event::SelectInputPort(port).into()
-        })
-        .placeholder("Select a device...");
+        let device_selector =
+            widget::pick_list(&self.input_ports[..], self.input_port.clone(), |port| {
+                GlobalEvent::SelectInputPort(port)
+            })
+            .placeholder("Select a device...");
 
         widget::column![
-            widget::button("Refresh Device List").on_press(input::Event::RefreshDeviceList.into()),
+            widget::button("Refresh Device List").on_press(GlobalEvent::RefreshDeviceList),
             device_selector,
-            widget::button("Play").on_press_maybe(input.port().map(|_| {
+            widget::button("Play").on_press_maybe(self.input_port.as_ref().map(|_| {
                 GlobalEvent::StateTransition(StateTransitionEvent::GameActive(GameSettings {}))
             }))
         ]
@@ -204,15 +194,14 @@ enum AppState {
 
 struct App {
     state: AppState,
-    input: input::Manager,
 }
 
 #[derive(From, Debug, Clone)]
 enum GlobalEvent {
     StateTransition(StateTransitionEvent),
-    InputManager(#[from] input::Event),
+    SelectInputPort(PortDescriptor),
+    RefreshDeviceList,
     InputEvent(#[from] MidiMessage),
-    InputError(#[from] input::Error),
 }
 
 impl App {
@@ -220,7 +209,6 @@ impl App {
         (
             Self {
                 state: AppState::Loading(Default::default()),
-                input: input::Manager::new(),
             },
             Task::future(verovio::initialize())
                 .map(|_| GlobalEvent::StateTransition(StateTransitionEvent::MainMenu)),
@@ -242,10 +230,6 @@ impl App {
                     self.state = AppState::GameFinished(GameFinishedState::new(results));
                 }
             },
-
-            GlobalEvent::InputManager(event) => {
-                self.input.update(event);
-            }
 
             event => {
                 return match &mut self.state {
@@ -282,9 +266,5 @@ impl App {
 
     fn theme(&self) -> Theme {
         Theme::Light
-    }
-
-    pub fn input(&self) -> &input::Manager {
-        &self.input
     }
 }

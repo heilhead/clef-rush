@@ -1,16 +1,16 @@
 use {
     super::GlobalEvent,
     derive_more::{Display, From},
+    futures_util::stream,
     iced::{
         Subscription,
         futures::{
             SinkExt,
             Stream,
             StreamExt,
-            channel::mpsc::{self, Sender, UnboundedReceiver, UnboundedSender},
+            channel::mpsc::{self, UnboundedSender},
         },
         keyboard::Key,
-        stream,
     },
     midir::MidiInputConnection,
     midly::{MidiMessage, live::LiveEvent, num::u7},
@@ -32,13 +32,17 @@ pub enum Error {
 }
 
 #[derive(Debug, Clone)]
+pub enum WorkerEvent {
+    Connect(PortDescriptor),
+    Disconnect,
+}
+
+#[derive(Debug, Clone)]
 pub enum Event {
     RefreshDeviceList,
     SelectInputPort(PortDescriptor),
-    WorkerReady(UnboundedSender<GlobalEvent>),
-    Connect(PortDescriptor),
+    WorkerReady(UnboundedSender<WorkerEvent>),
     ConnectionResult(Result<(), Error>),
-    Disconnect,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -49,14 +53,13 @@ pub struct PortHandle(usize);
 pub struct PortDescriptor {
     id: String,
     name: String,
-    handle: PortHandle,
 }
 
 pub struct Manager {
     input: Option<midir::MidiInput>,
     port: Option<(midir::MidiInputPort, PortDescriptor)>,
     ports: Option<(Vec<midir::MidiInputPort>, Vec<PortDescriptor>)>,
-    worker_tx: Option<UnboundedSender<GlobalEvent>>,
+    worker_tx: Option<UnboundedSender<WorkerEvent>>,
 }
 
 impl Manager {
@@ -119,7 +122,7 @@ impl Manager {
             }
 
             Event::WorkerReady(tx) => {
-                tx.unbounded_send(Event::Connect(self.port.as_ref().unwrap().1.clone()).into())
+                tx.unbounded_send(WorkerEvent::Connect(self.port().unwrap()))
                     .unwrap();
                 self.worker_tx = Some(tx);
             }
@@ -166,52 +169,53 @@ pub struct ConnectionHandle(#[from] MidiInputConnection<()>);
 
 pub fn connection_worker() -> impl Stream<Item = GlobalEvent> {
     let (mut out_tx, out_rx) = mpsc::unbounded();
-    let (worker_tx, mut worker_rx) = mpsc::unbounded::<GlobalEvent>();
+    let (worker_tx, mut worker_rx) = mpsc::unbounded();
 
-    futures_util::stream::select(
+    stream::select(
         out_rx,
-        futures_util::stream::once(async move {
-            out_tx
+        stream::once(async move {
+            let _ = out_tx
                 .send(GlobalEvent::InputManager(Event::WorkerReady(worker_tx)))
-                .await
-                .unwrap();
+                .await;
 
             let mut _handle = None;
 
             loop {
                 match worker_rx.select_next_some().await {
-                    GlobalEvent::InputManager(evt) => match evt {
-                        Event::Connect(port) => match connect(port, out_tx.clone()) {
-                            Ok(handle) => {
-                                _handle = Some(handle);
+                    WorkerEvent::Connect(port) => {
+                        let result = connect(port, out_tx.clone()).map(|handle| {
+                            _handle = Some(handle);
+                        });
 
-                                out_tx
-                                    .send(Event::ConnectionResult(Ok(())).into())
-                                    .await
-                                    .unwrap();
-                            }
+                        let _ = out_tx.send(Event::ConnectionResult(result).into()).await;
+                    }
 
-                            Err(err) => {
-                                out_tx
-                                    .send(Event::ConnectionResult(Err(err)).into())
-                                    .await
-                                    .unwrap();
-                            }
-                        },
-
-                        Event::Disconnect => {
-                            _handle = None;
-                        }
-
-                        _ => {}
-                    },
-
-                    _ => {}
+                    WorkerEvent::Disconnect => {
+                        _handle = None;
+                    }
                 }
             }
-        })
-        .filter_map(|_| async { None }),
+        }),
     )
+}
+
+pub fn available_ports() -> Vec<PortDescriptor> {
+    let mut midi_in =
+        midir::MidiInput::new("piano trainer input").map_err(|_| Error::InitFailed)?;
+    midi_in.ignore(midir::Ignore::None);
+    midi_in
+        .ports()
+        .into_iter()
+        .filter_map(|port| {
+            midi_in
+                .port_name(&port)
+                .map(|name| PortDescriptor {
+                    id: port.id(),
+                    name,
+                })
+                .ok()
+        })
+        .collect()
 }
 
 fn connect(
@@ -226,7 +230,7 @@ fn connect(
         .find_port_by_id(port.id.clone())
         .ok_or(Error::PortNotAvailable)?;
 
-    let handle = midi_in
+    midi_in
         .connect(
             &port,
             "piano-trainer-read-input",
@@ -264,9 +268,8 @@ fn connect(
             },
             (),
         )
-        .map_err(|err| Error::PortConnectionFailed(err.to_string()))?;
-
-    Ok(handle.into())
+        .map(ConnectionHandle)
+        .map_err(|err| Error::PortConnectionFailed(err.to_string()))
 }
 
 pub mod mock {
