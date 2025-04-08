@@ -1,11 +1,12 @@
 use {
+    derive_more::From,
     iced::{Element, Subscription, Task, Theme, widget},
-    midly::{MidiMessage, live::LiveEvent},
-    std::sync::{Arc, Mutex},
-    tap::{Tap, TapFallible as _},
+    midly::MidiMessage,
+    tap::TapFallible as _,
     wasm_bindgen::prelude::*,
 };
 
+mod input;
 mod util;
 mod verovio;
 
@@ -56,110 +57,50 @@ pub async fn main() {
 struct LoadingState {}
 
 impl LoadingState {
-    fn update(&mut self, message: Message) -> Task<Message> {
+    fn update(&mut self, event: GlobalEvent) -> Task<GlobalEvent> {
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view<'a>(&'a self, app: &'a App) -> Element<'a, GlobalEvent> {
         widget::column![widget::text("Loading...")].into()
     }
 
-    fn subscription(&self) -> Subscription<Message> {
+    fn subscription<'a>(&'a self, app: &'a App) -> Subscription<GlobalEvent> {
         Subscription::none()
     }
 }
 
-#[derive(derive_more::Display, Debug, Clone, PartialEq)]
-#[display("{}", name)]
-struct MidiPortDescriptor {
-    name: String,
-    index: usize,
-}
-
-struct MainMenuState {
-    midi_in: Option<midir::MidiInput>,
-    midi_port_selected: Option<MidiPortDescriptor>,
-    midi_ports: Option<(Vec<midir::MidiInputPort>, Vec<MidiPortDescriptor>)>,
-}
+struct MainMenuState {}
 
 impl MainMenuState {
     fn new() -> Self {
-        Self {
-            midi_in: Self::try_init_midi(),
-            midi_port_selected: None,
-            midi_ports: None,
-        }
+        Self {}
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
-        match message {
-            Message::RefreshMidiDeviceList => {
-                if self.midi_in.is_none() {
-                    self.midi_in = Self::try_init_midi();
-                }
-
-                if let Some(midi_in) = &self.midi_in {
-                    let ports = midi_in.ports();
-
-                    let descriptors = ports
-                        .iter()
-                        .enumerate()
-                        .map(|(index, port)| MidiPortDescriptor {
-                            name: midi_in
-                                .port_name(port)
-                                .unwrap_or_else(|_| "Unknown".to_owned()),
-                            index,
-                        })
-                        .collect();
-
-                    self.midi_ports = Some((ports, descriptors));
-                }
-            }
-
-            Message::SelectMidiPort(port) => {
-                self.midi_port_selected = Some(port);
-            }
-
-            _ => {}
-        }
-
+    fn update(&mut self, event: GlobalEvent) -> Task<GlobalEvent> {
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
-        let device_selector = widget::pick_list(
-            self.midi_ports
-                .as_ref()
-                .map(|(_, descriptors)| &descriptors[..])
-                .unwrap_or_default(),
-            self.midi_port_selected.clone(),
-            Message::SelectMidiPort,
-        )
+    fn view<'a>(&'a self, app: &'a App) -> Element<'a, GlobalEvent> {
+        let input = app.input();
+
+        let device_selector = widget::pick_list(input.ports(), input.port(), |port| {
+            input::Event::SelectInputPort(port).into()
+        })
         .placeholder("Select a device...");
 
         widget::column![
-            widget::button("Refresh Device List").on_press(Message::RefreshMidiDeviceList),
+            widget::button("Refresh Device List").on_press(input::Event::RefreshDeviceList.into()),
             device_selector,
-            widget::button("Play").on_press(Message::StateTransition(StateTransition::GameActive(
-                GameSettings {}
-            )))
+            widget::button("Play").on_press_maybe(input.port().map(|_| {
+                GlobalEvent::StateTransition(StateTransitionEvent::GameActive(GameSettings {}))
+            }))
         ]
         .into()
     }
 
-    fn subscription(&self) -> Subscription<Message> {
+    fn subscription<'a>(&'a self, app: &'a App) -> Subscription<GlobalEvent> {
         Subscription::none()
-    }
-
-    fn try_init_midi() -> Option<midir::MidiInput> {
-        midir::MidiInput::new("midir reading input")
-            .tap_ok_mut(|midi_in| {
-                midi_in.ignore(midir::Ignore::None);
-            })
-            .tap_err(|err| {
-                tracing::warn!(?err, "failed to init midi");
-            })
-            .ok()
     }
 }
 
@@ -173,22 +114,40 @@ impl GameActiveState {
         Self { settings }
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
+    fn update(&mut self, event: GlobalEvent) -> Task<GlobalEvent> {
+        match event {
+            GlobalEvent::InputEvent(msg) => match msg {
+                MidiMessage::NoteOn { key, vel } => {
+                    tracing::info!(?key, ?vel, "midi message: note on");
+                }
+
+                MidiMessage::NoteOff { key, vel } => {
+                    tracing::info!(?key, ?vel, "midi message: note off");
+                }
+
+                _ => {}
+            },
+
+            _ => {}
+        }
+
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
-        widget::column![widget::button("Finish").on_press(Message::StateTransition(
-            StateTransition::GameFinished(GameResults {
-                settings: self.settings.clone()
-            })
-        ))]
+    fn view<'a>(&'a self, app: &'a App) -> Element<'a, GlobalEvent> {
+        widget::column![
+            widget::button("Finish").on_press(GlobalEvent::StateTransition(
+                StateTransitionEvent::GameFinished(GameResults {
+                    settings: self.settings.clone()
+                })
+            ))
+        ]
         .into()
     }
 
-    fn subscription(&self) -> Subscription<Message> {
-        // time::every(Duration::from_secs(10)).map(|_| Message::Tick)
-        Subscription::none()
+    fn subscription<'a>(&'a self, app: &'a App) -> Subscription<GlobalEvent> {
+        Subscription::run(input::connection_worker)
+        // input::mock::subscription()
     }
 }
 
@@ -201,22 +160,22 @@ impl GameFinishedState {
         Self { results }
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
+    fn update(&mut self, message: GlobalEvent) -> Task<GlobalEvent> {
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view<'a>(&'a self, app: &'a App) -> Element<'a, GlobalEvent> {
         widget::column![
-            widget::button("Play Again").on_press(Message::StateTransition(
-                StateTransition::GameActive(self.results.settings.clone())
+            widget::button("Play Again").on_press(GlobalEvent::StateTransition(
+                StateTransitionEvent::GameActive(self.results.settings.clone())
             )),
             widget::button("Main Menu")
-                .on_press(Message::StateTransition(StateTransition::MainMenu))
+                .on_press(GlobalEvent::StateTransition(StateTransitionEvent::MainMenu))
         ]
         .into()
     }
 
-    fn subscription(&self) -> Subscription<Message> {
+    fn subscription<'a>(&'a self, app: &'a App) -> Subscription<GlobalEvent> {
         Subscription::none()
     }
 }
@@ -230,7 +189,7 @@ struct GameResults {
 }
 
 #[derive(Debug, Clone)]
-enum StateTransition {
+enum StateTransitionEvent {
     MainMenu,
     GameActive(GameSettings),
     GameFinished(GameResults),
@@ -245,50 +204,55 @@ enum AppState {
 
 struct App {
     state: AppState,
+    input: input::Manager,
 }
 
-#[derive(Debug, Clone)]
-enum Message {
-    StateTransition(StateTransition),
-    PlayGame,
-    FinishGame,
-    RefreshMidiDeviceList,
-    SelectMidiPort(MidiPortDescriptor),
+#[derive(From, Debug, Clone)]
+enum GlobalEvent {
+    StateTransition(StateTransitionEvent),
+    InputManager(#[from] input::Event),
+    InputEvent(#[from] MidiMessage),
+    InputError(#[from] input::Error),
 }
 
 impl App {
-    fn init() -> (Self, Task<Message>) {
+    fn init() -> (Self, Task<GlobalEvent>) {
         (
             Self {
                 state: AppState::Loading(Default::default()),
+                input: input::Manager::new(),
             },
             Task::future(verovio::initialize())
-                .map(|_| Message::StateTransition(StateTransition::MainMenu)),
+                .map(|_| GlobalEvent::StateTransition(StateTransitionEvent::MainMenu)),
         )
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
-        match message {
-            Message::StateTransition(new_state) => match new_state {
-                StateTransition::MainMenu => {
+    fn update(&mut self, event: GlobalEvent) -> Task<GlobalEvent> {
+        match event {
+            GlobalEvent::StateTransition(new_state) => match new_state {
+                StateTransitionEvent::MainMenu => {
                     self.state = AppState::MainMenu(MainMenuState::new());
                 }
 
-                StateTransition::GameActive(settings) => {
+                StateTransitionEvent::GameActive(settings) => {
                     self.state = AppState::GameActive(GameActiveState::new(settings));
                 }
 
-                StateTransition::GameFinished(results) => {
+                StateTransitionEvent::GameFinished(results) => {
                     self.state = AppState::GameFinished(GameFinishedState::new(results));
                 }
             },
 
-            message => {
+            GlobalEvent::InputManager(event) => {
+                self.input.update(event);
+            }
+
+            event => {
                 return match &mut self.state {
-                    AppState::Loading(state) => state.update(message),
-                    AppState::MainMenu(state) => state.update(message),
-                    AppState::GameActive(state) => state.update(message),
-                    AppState::GameFinished(state) => state.update(message),
+                    AppState::Loading(state) => state.update(event),
+                    AppState::MainMenu(state) => state.update(event),
+                    AppState::GameActive(state) => state.update(event),
+                    AppState::GameFinished(state) => state.update(event),
                 };
             }
         }
@@ -296,27 +260,31 @@ impl App {
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<GlobalEvent> {
         // TODO: Header/footer, global layout.
 
         match &self.state {
-            AppState::Loading(state) => state.view(),
-            AppState::MainMenu(state) => state.view(),
-            AppState::GameActive(state) => state.view(),
-            AppState::GameFinished(state) => state.view(),
+            AppState::Loading(state) => state.view(self),
+            AppState::MainMenu(state) => state.view(self),
+            AppState::GameActive(state) => state.view(self),
+            AppState::GameFinished(state) => state.view(self),
         }
     }
 
-    fn subscription(&self) -> Subscription<Message> {
+    fn subscription(&self) -> Subscription<GlobalEvent> {
         match &self.state {
-            AppState::Loading(state) => state.subscription(),
-            AppState::MainMenu(state) => state.subscription(),
-            AppState::GameActive(state) => state.subscription(),
-            AppState::GameFinished(state) => state.subscription(),
+            AppState::Loading(state) => state.subscription(self),
+            AppState::MainMenu(state) => state.subscription(self),
+            AppState::GameActive(state) => state.subscription(self),
+            AppState::GameFinished(state) => state.subscription(self),
         }
     }
 
     fn theme(&self) -> Theme {
         Theme::Light
+    }
+
+    pub fn input(&self) -> &input::Manager {
+        &self.input
     }
 }
