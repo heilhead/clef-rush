@@ -20,15 +20,13 @@ extern "C" {
     async fn reset_options();
 
     #[wasm_bindgen(static_method_of = Verovio, js_name = convertToSVG)]
-    async fn convert_to_svg(xml: JsString) -> JsString;
+    async fn convert_to_svg(mei: JsString) -> JsString;
 }
 
 pub async fn initialize() {
     tracing::info!("initializing verovio...");
     Verovio::init().await;
-    tracing::info!("pinging...");
     Verovio::ping().await;
-    tracing::info!("updating config...");
     Verovio::set_options(include_str!("../resources/verovio_options.json").into()).await;
     tracing::info!("ready");
 }

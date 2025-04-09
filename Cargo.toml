@@ -24,6 +24,7 @@ js-sys = "0.3"
 midly = "0.5"
 derive_more = { version = "2.0", features = [
     "display",
+    "debug",
     "deref",
     "from",
     "into",
