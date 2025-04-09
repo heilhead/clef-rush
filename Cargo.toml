@@ -31,3 +31,9 @@ derive_more = { version = "2.0", features = [
 ] }
 thiserror = "2.0"
 futures-util = "0.3"
+wasm-bindgen-test = "0.3"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+rand = { version = "0.9", default-features = false, features = [
+    "std",
+    "thread_rng",
+] }

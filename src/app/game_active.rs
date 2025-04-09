@@ -3,15 +3,20 @@ use {
     crate::{
         app::StateTransition,
         input::{self, Connector},
+        keyboard::{self, Key, KeyPos},
     },
     iced::{Element, Subscription, Task, widget},
     midly::MidiMessage,
 };
 
+mod sheet;
+
 pub struct State {
     settings: GameSettings,
     initialized: bool,
     input: Option<Connector>,
+    range_treble: Vec<Key>,
+    range_bass: Vec<Key>,
     // svg: Option<widget::svg::Handle>,
 }
 
@@ -21,11 +26,17 @@ impl State {
             settings,
             initialized: false,
             input: None,
+            range_treble: keyboard::range(&KeyPos::C.oct(4), &KeyPos::B.oct(5)).collect(),
+            range_bass: keyboard::range(&KeyPos::C.oct(2), &KeyPos::B.oct(3)).collect(),
         }
     }
 
     pub fn init(&mut self) -> Task<Message> {
-        Task::none()
+        if super::USE_MOCK_INPUT {
+            Task::done(Message::Ready)
+        } else {
+            Task::none()
+        }
     }
 
     pub fn update(&mut self, event: Message) -> Task<Message> {
@@ -51,15 +62,20 @@ impl State {
             Message::Ready => {
                 tracing::info!("port connected");
                 self.initialized = true;
+                return self.advance();
             }
 
             Message::InputEvent(msg) => match msg {
                 MidiMessage::NoteOn { key, vel } => {
-                    tracing::info!(?key, ?vel, "midi message: note on");
+                    if let Ok(parsed) = keyboard::Key::try_from_midi(key) {
+                        tracing::info!(?key, ?vel, %parsed, "midi message: note on");
+                    };
                 }
 
                 MidiMessage::NoteOff { key, vel } => {
-                    tracing::info!(?key, ?vel, "midi message: note off");
+                    if let Ok(parsed) = keyboard::Key::try_from_midi(key) {
+                        tracing::info!(?key, ?vel, %parsed, "midi message: note off");
+                    };
                 }
 
                 _ => {}
@@ -85,7 +101,14 @@ impl State {
     }
 
     pub fn subscription<'a>(&'a self, _: &'a App) -> Subscription<Message> {
-        Subscription::run(input::connection_worker)
-        // input::mock::subscription()
+        if super::USE_MOCK_INPUT {
+            input::mock::subscription()
+        } else {
+            Subscription::run(input::connection_worker)
+        }
+    }
+
+    fn advance(&mut self) -> Task<Message> {
+        Task::none()
     }
 }

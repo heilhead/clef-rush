@@ -13,6 +13,8 @@ mod game_finished;
 mod loading;
 mod main_menu;
 
+const USE_MOCK_INPUT: bool = true;
+
 #[derive(Debug, Clone)]
 pub struct GameSettings {
     input_port: input::PortDescriptor,

@@ -1,7 +1,10 @@
+#![no_main]
+
 use {app::App, tap::TapFallible, wasm_bindgen::prelude::*};
 
 pub mod app;
 pub mod input;
+pub mod keyboard;
 pub mod util;
 pub mod verovio;
 
@@ -12,7 +15,8 @@ pub async fn main() {
 
     // modal, loading_spinners, layout, checkbox
 
-    input::refresh_ports();
+    // Initialize midi input as early as possible.
+    let _ = input::port_list();
 
     let _ = iced::application("Piano Trainer", App::update, App::view)
         .subscription(App::subscription)

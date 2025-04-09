@@ -2,7 +2,6 @@ use {
     super::{App, GameSettings, Message, StateTransition},
     crate::input::{self, PortDescriptor},
     iced::{Element, Subscription, Task, widget},
-    tap::TapFallible as _,
 };
 
 pub struct State {
@@ -13,7 +12,7 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         Self {
-            input_ports: input::available_ports().unwrap_or_default(),
+            input_ports: input::port_list(),
             input_port: None,
         }
     }
@@ -25,11 +24,7 @@ impl State {
     pub fn update(&mut self, event: Message) -> Task<Message> {
         match event {
             Message::RefreshDeviceList => {
-                self.input_ports = input::available_ports()
-                    .tap_err(|err| {
-                        tracing::warn!(?err, "failed to fetch input device list");
-                    })
-                    .unwrap_or_default();
+                self.input_ports = input::port_list();
             }
 
             Message::SelectInputPort(port) => {
@@ -49,14 +44,25 @@ impl State {
             })
             .placeholder("Select a device...");
 
-        widget::column![
-            widget::button("Refresh Device List").on_press(Message::RefreshDeviceList),
-            device_selector,
-            widget::button("Play").on_press_maybe(self.input_port.as_ref().map(|port| {
+        let btn_play = widget::button("Play");
+        let btn_play = if super::USE_MOCK_INPUT {
+            btn_play.on_press(Message::StateTransition(StateTransition::GameActive(
+                GameSettings {
+                    input_port: Default::default(),
+                },
+            )))
+        } else {
+            btn_play.on_press_maybe(self.input_port.as_ref().map(|port| {
                 Message::StateTransition(StateTransition::GameActive(GameSettings {
                     input_port: port.clone(),
                 }))
             }))
+        };
+
+        widget::column![
+            widget::button("Refresh Device List").on_press(Message::RefreshDeviceList),
+            device_selector,
+            btn_play
         ]
         .into()
     }

@@ -13,7 +13,6 @@ use {
                 oneshot,
             },
         },
-        keyboard::Key,
     },
     midir::MidiInputConnection,
     midly::{MidiMessage, live::LiveEvent, num::u7},
@@ -43,7 +42,7 @@ struct ConnectEvent {
     resp: oneshot::Sender<Result<(), Error>>,
 }
 
-#[derive(Display, Debug, Clone, PartialEq)]
+#[derive(Default, Display, Debug, Clone, PartialEq)]
 #[display("{}", name)]
 pub struct PortDescriptor {
     id: String,
@@ -103,25 +102,20 @@ pub fn connection_worker() -> impl Stream<Item = Message> {
     )
 }
 
-pub fn refresh_ports() {
-    let _ = midir::MidiInput::new("piano trainer device list")
-        .tap_ok(|input| {
-            input.ports();
-        })
-        .tap_err(|err| {
-            tracing::warn!(?err, "failed to refresh input ports");
-        });
-}
+pub fn port_list() -> Vec<PortDescriptor> {
+    let result = midir::MidiInput::new("piano trainer device list").map_err(|err| {
+        tracing::warn!(?err, "failed to refresh input ports");
+    });
 
-pub fn available_ports() -> Result<Vec<PortDescriptor>, Error> {
-    let input =
-        midir::MidiInput::new("piano trainer device list").map_err(|_| Error::InitFailed)?;
+    let Ok(midi_in) = result else {
+        return Vec::new();
+    };
 
-    let ports = input
+    midi_in
         .ports()
         .into_iter()
         .map(|port| {
-            let name = input
+            let name = midi_in
                 .port_name(&port)
                 .unwrap_or_else(|_| UNKNOWN_PORT_NAME.to_owned());
 
@@ -130,9 +124,7 @@ pub fn available_ports() -> Result<Vec<PortDescriptor>, Error> {
                 name,
             }
         })
-        .collect();
-
-    Ok(ports)
+        .collect()
 }
 
 fn connect(
@@ -180,7 +172,7 @@ fn process_event(stamp: u64, message: &[u8], out_tx: &UnboundedSender<Message>) 
 }
 
 pub mod mock {
-    use super::*;
+    use {super::*, crate::keyboard::KeyPos, iced::keyboard::Key};
 
     pub fn subscription() -> Subscription<Message> {
         Subscription::batch([
@@ -198,11 +190,11 @@ pub mod mock {
     }
 
     fn translate_key_note(key: Key) -> Option<u7> {
-        const BASE_NOTE_OFFSET: u8 = 75;
+        let base_offset = KeyPos::C.oct(4).to_midi().as_int() - 13;
 
         match key {
             Key::Character(code) => match code.chars().next() {
-                Some(code @ 'a'..='z') => Some((code as u8 - 'a' as u8 + BASE_NOTE_OFFSET).into()),
+                Some(code @ 'a'..='z') => Some((code as u8 - 'a' as u8 + base_offset).into()),
                 _ => None,
             },
             _ => None,
