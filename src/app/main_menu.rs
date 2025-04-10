@@ -45,6 +45,7 @@ impl State {
             .placeholder("Select a device...");
 
         let btn_play = widget::button("Play");
+
         let btn_play = if super::USE_MOCK_INPUT {
             btn_play.on_press(Message::StateTransition(StateTransition::GameActive(
                 GameSettings {

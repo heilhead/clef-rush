@@ -6,7 +6,7 @@ pub enum Error {
     KeyOutOfRange,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum KeyPos {
     C = 0,
@@ -45,6 +45,29 @@ impl KeyPos {
         }
     }
 
+    pub fn is_neutral(&self) -> bool {
+        !self.is_sharp()
+    }
+
+    pub fn is_sharp(&self) -> bool {
+        match self {
+            Self::CSharp | Self::DSharp | Self::FSharp | Self::GSharp | Self::ASharp => true,
+            _ => false,
+        }
+    }
+
+    pub fn pitch_name(&self) -> &'static str {
+        match self {
+            Self::C | Self::CSharp => "c",
+            Self::D | Self::DSharp => "d",
+            Self::E => "e",
+            Self::F | Self::FSharp => "f",
+            Self::G | Self::GSharp => "g",
+            Self::A | Self::ASharp => "a",
+            Self::B => "b",
+        }
+    }
+
     fn from_u8(val: u8) -> Self {
         match val {
             0 => Self::C,
@@ -64,7 +87,7 @@ impl KeyPos {
     }
 }
 
-#[derive(Display, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Display, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[display("{}/{}", pos.as_str(), oct)]
 pub struct Key {
     pub pos: KeyPos,

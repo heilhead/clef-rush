@@ -4,7 +4,8 @@ use {
         verovio,
     },
     derive_more::From,
-    iced::{Element, Subscription, Task, Theme},
+    game_active::Challenge,
+    iced::{Color, Element, Subscription, Task, Theme},
     midly::MidiMessage,
 };
 
@@ -62,6 +63,7 @@ pub enum Message {
     InputEvent(#[from] MidiMessage),
     InputWorkerReady(input::Connector),
     Ready,
+    NextChallenge(Challenge),
 }
 
 impl App {
@@ -115,6 +117,7 @@ impl App {
             State::GameActive(state) => state.view(self),
             State::GameFinished(state) => state.view(self),
         }
+        .explain(Color::BLACK)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

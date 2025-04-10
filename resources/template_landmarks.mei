@@ -5,10 +5,10 @@
    <meiHead>
       <fileDesc>
          <titleStmt>
-            <title type="main">Untitled score</title>
-            <title type="subordinate">Subtitle</title>
+            <title type="main"></title>
+            <title type="subordinate"></title>
             <respStmt>
-               <persName role="composer">Composer / arranger</persName>
+               <persName role="composer"></persName>
             </respStmt>
          </titleStmt>
          <pubStmt>
@@ -23,13 +23,13 @@
                <scoreDef>
                   <pgHead>
                      <rend halign="left" valign="top">
-                        <rend type="instrument_excerpt">Piano</rend>
+                        <rend type="instrument_excerpt"></rend>
                      </rend>
                   </pgHead>
                   <staffGrp>
                      <staffGrp bar.thru="true" symbol="brace">
-                        <label>Piano</label>
-                        <labelAbbr>Pno.</labelAbbr>
+                        <label></label>
+                        <labelAbbr></labelAbbr>
                         <staffDef n="1" lines="5">
                            <clef shape="G" line="2" />
                         </staffDef>

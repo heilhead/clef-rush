@@ -7,6 +7,8 @@ use {
     },
     iced::{Element, Subscription, Task, widget},
     midly::MidiMessage,
+    rand::seq::IndexedRandom,
+    std::{borrow::Cow, collections::HashSet},
 };
 
 mod sheet;
@@ -17,7 +19,7 @@ pub struct State {
     input: Option<Connector>,
     range_treble: Vec<Key>,
     range_bass: Vec<Key>,
-    // svg: Option<widget::svg::Handle>,
+    challenge: Option<Challenge>,
 }
 
 impl State {
@@ -26,8 +28,13 @@ impl State {
             settings,
             initialized: false,
             input: None,
-            range_treble: keyboard::range(&KeyPos::C.oct(4), &KeyPos::B.oct(5)).collect(),
-            range_bass: keyboard::range(&KeyPos::C.oct(2), &KeyPos::B.oct(3)).collect(),
+            range_treble: keyboard::range(&KeyPos::G.oct(3), &KeyPos::C.oct(5))
+                .filter(|key| key.pos.is_neutral())
+                .collect(),
+            range_bass: keyboard::range(&KeyPos::C.oct(2), &KeyPos::B.oct(3))
+                .filter(|key| key.pos.is_neutral())
+                .collect(),
+            challenge: None,
         }
     }
 
@@ -65,16 +72,26 @@ impl State {
                 return self.advance();
             }
 
+            Message::NextChallenge(challenge) => {
+                self.challenge = Some(challenge);
+            }
+
             Message::InputEvent(msg) => match msg {
                 MidiMessage::NoteOn { key, vel } => {
-                    if let Ok(parsed) = keyboard::Key::try_from_midi(key) {
-                        tracing::info!(?key, ?vel, %parsed, "midi message: note on");
-                    };
-                }
+                    if let Ok(key) = Key::try_from_midi(key) {
+                        tracing::info!(?key, ?vel, "midi message: note on");
 
-                MidiMessage::NoteOff { key, vel } => {
-                    if let Ok(parsed) = keyboard::Key::try_from_midi(key) {
-                        tracing::info!(?key, ?vel, %parsed, "midi message: note off");
+                        if let Some(challenge) = &mut self.challenge {
+                            if challenge.validator.validate(key) {
+                                tracing::info!(?key, "correct key");
+
+                                if challenge.validator.finished() {
+                                    return self.advance();
+                                }
+                            } else {
+                                tracing::info!(?key, "incorrect key");
+                            }
+                        }
                     };
                 }
 
@@ -89,11 +106,20 @@ impl State {
 
     pub fn view<'a>(&'a self, _: &'a App) -> Element<'a, Message> {
         if self.initialized {
-            widget::column![widget::button("Finish").on_press(Message::StateTransition(
-                StateTransition::GameFinished(GameResults {
-                    settings: self.settings.clone()
-                })
-            ))]
+            let hint: Element<'a, Message> = if let Some(challenge) = &self.challenge {
+                widget::svg(challenge.hint.clone()).into()
+            } else {
+                widget::text("loading...").into()
+            };
+
+            widget::column![
+                hint,
+                widget::button("Finish").on_press(Message::StateTransition(
+                    StateTransition::GameFinished(GameResults {
+                        settings: self.settings.clone()
+                    })
+                ))
+            ]
             .into()
         } else {
             widget::column![widget::text("connecting input...")].into()
@@ -109,6 +135,78 @@ impl State {
     }
 
     fn advance(&mut self) -> Task<Message> {
-        Task::none()
+        self.challenge = None;
+
+        let treble_note =
+            sheet::Notes::Single(*self.range_treble[..].choose(&mut rand::rng()).unwrap());
+        let bass_note =
+            sheet::Notes::Single(*self.range_bass[..].choose(&mut rand::rng()).unwrap());
+
+        Task::future(async move {
+            let instant = instant::Instant::now();
+            let hint = sheet::generate_svg(Some(&treble_note), None).await;
+            tracing::info!(elapsed = ?instant.elapsed(), %hint, "generated svg");
+
+            let hint = iced::widget::svg::Handle::from_memory(Cow::Owned(hint.as_bytes().into()));
+
+            Message::NextChallenge(Challenge::new(Some(&treble_note), None, hint))
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Challenge {
+    validator: Validator,
+    hint: widget::svg::Handle,
+}
+
+impl Challenge {
+    fn new(
+        treble: Option<&sheet::Notes>,
+        bass: Option<&sheet::Notes>,
+        hint: widget::svg::Handle,
+    ) -> Self {
+        Self {
+            validator: Validator::new(treble, bass),
+            hint,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Validator {
+    expected: HashSet<Key>,
+    validated: HashSet<Key>,
+}
+
+impl Validator {
+    fn new(treble: Option<&sheet::Notes>, bass: Option<&sheet::Notes>) -> Self {
+        let mut expected = HashSet::new();
+
+        if let Some(notes) = treble {
+            expected.extend(notes.keys());
+        }
+
+        if let Some(notes) = bass {
+            expected.extend(notes.keys());
+        }
+
+        Self {
+            expected,
+            validated: HashSet::new(),
+        }
+    }
+
+    fn validate(&mut self, key: Key) -> bool {
+        if self.expected.remove(&key) {
+            self.validated.insert(key);
+            true
+        } else {
+            self.validated.contains(&key)
+        }
+    }
+
+    fn finished(&self) -> bool {
+        self.expected.is_empty()
     }
 }

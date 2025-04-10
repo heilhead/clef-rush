@@ -34,15 +34,3 @@ pub async fn initialize() {
 pub async fn convert_to_svg(mei: String) -> String {
     Verovio::convert_to_svg(mei.into()).await.into()
 }
-
-pub async fn update_svg() -> String {
-    tracing::info!("generating svg...");
-    let instant = instant::Instant::now();
-    let result: String = Verovio::convert_to_svg(include_str!("../resources/landmarks.mei").into())
-        .await
-        .into();
-    let elapsed = instant.elapsed();
-    tracing::info!(?elapsed, "svg");
-
-    result
-}
