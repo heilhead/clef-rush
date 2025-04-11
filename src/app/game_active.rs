@@ -76,6 +76,10 @@ impl State {
                 self.challenge = Some(challenge);
             }
 
+            Message::SkipChallenge => {
+                return self.advance();
+            }
+
             Message::InputEvent(msg) => match msg {
                 MidiMessage::NoteOn { key, vel } => {
                     if let Ok(key) = Key::try_from_midi(key) {
@@ -114,6 +118,7 @@ impl State {
 
             widget::column![
                 hint,
+                widget::button("Skip").on_press(Message::SkipChallenge),
                 widget::button("Finish").on_press(Message::StateTransition(
                     StateTransition::GameFinished(GameResults {
                         settings: self.settings.clone()

@@ -5,7 +5,17 @@ use {
     },
     derive_more::From,
     game_active::Challenge,
-    iced::{Color, Element, Subscription, Task, Theme},
+    iced::{
+        Color,
+        Element,
+        Length,
+        Subscription,
+        Task,
+        Theme,
+        alignment::{Horizontal, Vertical},
+        font,
+        widget::{self, text::Shaping},
+    },
     midly::MidiMessage,
 };
 
@@ -63,6 +73,7 @@ pub enum Message {
     InputEvent(#[from] MidiMessage),
     InputWorkerReady(input::Connector),
     Ready,
+    SkipChallenge,
     NextChallenge(Challenge),
 }
 
@@ -72,7 +83,7 @@ impl App {
             Self {
                 state: State::Loading(Default::default()),
             },
-            Task::future(verovio::initialize())
+            Task::batch([Task::future(verovio::initialize()), Font::load_all()])
                 .map(|_| Message::StateTransition(StateTransition::MainMenu)),
         )
     }
@@ -109,15 +120,28 @@ impl App {
     }
 
     pub fn view(&self) -> Element<Message> {
-        // TODO: Header/footer, global layout.
+        let title = widget::text("Piano Trainer")
+            .size(36)
+            .font(Font::Title)
+            .shaping(Shaping::Advanced);
 
-        match &self.state {
+        let header = widget::row![title].spacing(20).align_y(Vertical::Center);
+
+        let content = match &self.state {
             State::Loading(state) => state.view(self),
             State::MainMenu(state) => state.view(self),
             State::GameActive(state) => state.view(self),
             State::GameFinished(state) => state.view(self),
-        }
-        .explain(Color::BLACK)
+        };
+
+        let res: Element<_> = widget::column![header, content]
+            .spacing(10)
+            .padding(20)
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .into();
+
+        res.explain(Color::BLACK)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -130,6 +154,39 @@ impl App {
     }
 
     pub fn theme(&self) -> Theme {
-        Theme::Light
+        Theme::CatppuccinLatte
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Font {
+    // #[default]
+    // Default,
+    Title,
+}
+
+impl Font {
+    fn load_all() -> Task<()> {
+        iced::font::load(include_bytes!("../fonts/garineldosc/GarineldoSCNo01.otf")).map(|res| {
+            if let Err(err) = res {
+                tracing::warn!(?err, "failed to load font");
+            } else {
+                tracing::info!("fonts loaded");
+            }
+        })
+    }
+}
+
+impl From<Font> for iced::Font {
+    fn from(value: Font) -> Self {
+        match value {
+            // Font::Default => iced::Font::DEFAULT,
+            Font::Title => iced::Font {
+                family: font::Family::Name("GarineldoSCNo01"),
+                // style: font::Style::Italic,
+                // weight: font::Weight::Bold,
+                ..Default::default()
+            },
+        }
     }
 }

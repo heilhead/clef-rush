@@ -24,10 +24,6 @@ impl Notes {
         Iter::new(self)
     }
 
-    pub fn into_keys(self) -> impl Iterator<Item = Key> {
-        IntoIter::new(self)
-    }
-
     fn to_mei(&self) -> String {
         match self {
             Self::Single(key) => {
@@ -118,7 +114,7 @@ fn generate_mei(treble: Option<&Notes>, bass: Option<&Notes>) -> String {
         .unwrap_or_else(generate_rest);
     let bass = bass.map(|note| note.to_mei()).unwrap_or_else(generate_rest);
 
-    TEMPLATE_NO_LANDMARKS
+    TEMPLATE_LANDMARKS
         .replacen(TEMPLATE_TREBLE_NOTES, &treble, 1)
         .replacen(TEMPLATE_BASS_NOTES, &bass, 1)
 }
