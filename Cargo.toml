@@ -7,7 +7,22 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-iced = { version = "0.13", features = ["webgl", "svg"] }
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "d1e936f", default-features = false, features = [
+    "web-colors",
+    "auto-detect-theme",
+    "wgpu",
+    "webgl",
+    "fira-sans",
+    "svg",
+] }
+# iced = { path = "/home/ivan/git/iced", default-features = false, features = [
+#     "web-colors",
+#     "auto-detect-theme",
+#     "wgpu",
+#     "webgl",
+#     "fira-sans",
+#     "svg",
+# ] }
 console_error_panic_hook = "0.1"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -40,3 +55,6 @@ wasm-bindgen-test = "0.3"
 [profile.release]
 lto = true
 opt-level = 'z'
+
+# [replace]
+# "cosmic-text:0.14.1" = { path = "/mnt/storage/git/cosmic-text/" }

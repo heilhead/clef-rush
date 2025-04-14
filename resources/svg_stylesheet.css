@@ -1,0 +1,15 @@
+.note.correct * {
+    fill: #00ff00;
+}
+
+.note.incorrect * {
+    fill: #ff0000;
+}
+
+g.note:not(data-id="id1", data-id="id2") use {
+    fill: #ff0000;
+}
+
+g[data-id="id1"] {
+    fill: #00ff00;
+}

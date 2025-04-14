@@ -18,10 +18,13 @@ pub async fn main() {
     // Initialize midi input as early as possible.
     let _ = input::port_list();
 
-    let _ = iced::application("Piano Trainer", App::update, App::view)
+    let _ = iced::application(App::boot, App::update, App::view)
         .subscription(App::subscription)
         .theme(App::theme)
-        .run_with(App::boot)
+        .font(app::Font::Title.source())
+        // .font(app::Font::Default.source())
+        .default_font(app::Font::default().into())
+        .run()
         .tap_err(|err| {
             tracing::error!(?err, "iced app failed");
         });

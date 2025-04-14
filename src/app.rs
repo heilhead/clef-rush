@@ -25,6 +25,7 @@ mod loading;
 mod main_menu;
 
 const USE_MOCK_INPUT: bool = true;
+const TITLE: &str = "Clef Rush";
 
 #[derive(Debug, Clone)]
 pub struct GameSettings {
@@ -83,7 +84,7 @@ impl App {
             Self {
                 state: State::Loading(Default::default()),
             },
-            Task::batch([Task::future(verovio::initialize()), Font::load_all()])
+            Task::future(verovio::initialize())
                 .map(|_| Message::StateTransition(StateTransition::MainMenu)),
         )
     }
@@ -120,7 +121,7 @@ impl App {
     }
 
     pub fn view(&self) -> Element<Message> {
-        let title = widget::text("Piano Trainer")
+        let title = widget::text(TITLE)
             .size(36)
             .font(Font::Title)
             .shaping(Shaping::Advanced);
@@ -158,33 +159,51 @@ impl App {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub enum Font {
-    // #[default]
-    // Default,
+    #[default]
+    Default,
     Title,
 }
 
 impl Font {
-    fn load_all() -> Task<()> {
-        iced::font::load(include_bytes!("../fonts/garineldosc/GarineldoSCNo01.otf")).map(|res| {
+    pub fn family(&self) -> font::Family {
+        match self {
+            Font::Default => font::Family::SansSerif,
+            Font::Title => font::Family::Name("Stigmature"),
+        }
+    }
+
+    pub fn source(&self) -> &'static [u8] {
+        match self {
+            Self::Default => &[],
+            Self::Title => &include_bytes!("../fonts/stigmature/Stigmature.otf")[..],
+        }
+    }
+
+    pub fn load(&self) -> Task<()> {
+        let font = *self;
+
+        iced::font::load(self.source()).map(move |res| {
             if let Err(err) = res {
-                tracing::warn!(?err, "failed to load font");
+                tracing::warn!(?err, ?font, "failed to load font");
             } else {
                 tracing::info!("fonts loaded");
             }
         })
+    }
+
+    pub fn load_all() -> Task<()> {
+        Self::Title.load()
     }
 }
 
 impl From<Font> for iced::Font {
     fn from(value: Font) -> Self {
         match value {
-            // Font::Default => iced::Font::DEFAULT,
+            Font::Default => iced::Font::DEFAULT,
             Font::Title => iced::Font {
-                family: font::Family::Name("GarineldoSCNo01"),
-                // style: font::Style::Italic,
-                // weight: font::Weight::Bold,
+                family: value.family(),
                 ..Default::default()
             },
         }

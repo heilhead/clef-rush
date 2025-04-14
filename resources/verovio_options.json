@@ -7,5 +7,6 @@
   "svgFormatRaw": true,
   "svgHtml5": true,
   "svgRemoveXlink": true,
-  "svgViewBox": true
+  "svgViewBox": true,
+  "svgAdditionalAttribute": ["note@pname", "note@oct"]
 }

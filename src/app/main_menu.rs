@@ -1,5 +1,5 @@
 use {
-    super::{App, GameSettings, Message, StateTransition},
+    super::{App, Font, GameSettings, Message, StateTransition},
     crate::input::{self, PortDescriptor},
     iced::{Element, Subscription, Task, widget},
 };
@@ -44,7 +44,7 @@ impl State {
             })
             .placeholder("Select a device...");
 
-        let btn_play = widget::button("Play");
+        let btn_play = widget::button("Start");
 
         let btn_play = if super::USE_MOCK_INPUT {
             btn_play.on_press(Message::StateTransition(StateTransition::GameActive(

@@ -8,9 +8,15 @@ const TEMPLATE_NO_LANDMARKS: &str = include_str!("../../../resources/template.me
 const TEMPLATE_LANDMARKS: &str = include_str!("../../../resources/template_landmarks.mei");
 const TEMPLATE_TREBLE_NOTES: &str = "{{treble_notes}}";
 const TEMPLATE_BASS_NOTES: &str = "{{bass_notes}}";
+const SVG_STYLE_SHEET: &str = include_str!("../../../resources/svg_stylesheet.css");
 
 pub async fn generate_svg(treble: Option<&Notes>, bass: Option<&Notes>) -> String {
-    verovio::convert_to_svg(generate_mei(treble, bass)).await
+    let svg =
+        verovio::convert_to_svg(include_str!("../../../resources/template2.mei").to_owned()).await;
+
+    // verovio::convert_to_svg(generate_mei(treble, bass)).await
+
+    svg
 }
 
 #[derive(Debug, Clone)]
