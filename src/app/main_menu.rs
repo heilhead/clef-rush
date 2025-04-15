@@ -1,5 +1,5 @@
 use {
-    super::{App, Font, GameSettings, Message, StateTransition},
+    super::{App, GameSettings, Message, StateTransition},
     crate::input::{self, PortDescriptor},
     iced::{Element, Subscription, Task, widget},
 };

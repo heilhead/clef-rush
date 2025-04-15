@@ -120,6 +120,18 @@ impl Key {
     }
 }
 
+impl PartialOrd<Key> for Key {
+    fn partial_cmp(&self, other: &Key) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Key {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_midi().cmp(&other.to_midi())
+    }
+}
+
 /// Returns an iterator for range `start..=end`.
 pub fn range(start: &Key, end: &Key) -> impl Iterator<Item = Key> {
     let start = start.to_midi().as_int();

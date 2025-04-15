@@ -48,6 +48,7 @@ rand = { version = "0.9", default-features = false, features = [
     "std",
     "thread_rng",
 ] }
+smallvec = "1.15"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

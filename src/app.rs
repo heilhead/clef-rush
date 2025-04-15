@@ -4,7 +4,6 @@ use {
         verovio,
     },
     derive_more::From,
-    game_active::Challenge,
     iced::{
         Color,
         Element,
@@ -12,7 +11,7 @@ use {
         Subscription,
         Task,
         Theme,
-        alignment::{Horizontal, Vertical},
+        alignment::Vertical,
         font,
         widget::{self, text::Shaping},
     },
@@ -74,8 +73,8 @@ pub enum Message {
     InputEvent(#[from] MidiMessage),
     InputWorkerReady(input::Connector),
     Ready,
-    SkipChallenge,
-    NextChallenge(Challenge),
+    AdvanceChallenge,
+    UpdateChallengeHint(widget::svg::Handle),
 }
 
 impl App {
