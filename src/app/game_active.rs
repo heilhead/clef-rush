@@ -4,9 +4,16 @@ use {
         app::StateTransition,
         input::{self, Connector},
         keyboard::{self, Key, KeyPos},
+        piano::{self, Piano},
         util,
     },
-    iced::{Element, Subscription, Task, widget},
+    iced::{
+        Element,
+        Length,
+        Subscription,
+        Task,
+        widget::{self, Container},
+    },
     midly::MidiMessage,
     rand::seq::IndexedRandom,
     sheet::{Note, Sheet},
@@ -23,17 +30,18 @@ pub struct State {
     range_bass: Vec<Key>,
     challenge: Option<Challenge>,
     hint: Option<widget::svg::Handle>,
+    piano: Piano,
 }
 
 impl State {
     pub fn new(settings: GameSettings) -> Self {
         let mut range_treble = keyboard::range(&KeyPos::B.oct(3), &KeyPos::C.oct(5))
-            .filter(|key| key.pos.is_neutral())
+            .filter(|key| key.pos.is_natural())
             .collect::<Vec<_>>();
         range_treble.sort();
 
         let mut range_bass = keyboard::range(&KeyPos::C.oct(2), &KeyPos::A.oct(3))
-            .filter(|key| key.pos.is_neutral())
+            .filter(|key| key.pos.is_natural())
             .collect::<Vec<_>>();
         range_bass.sort();
 
@@ -45,6 +53,7 @@ impl State {
             range_bass,
             challenge: None,
             hint: None,
+            piano: Piano::new(keyboard::Keyboard::standard_88_key()),
         }
     }
 
@@ -96,6 +105,8 @@ impl State {
                         tracing::info!(?key, ?vel, "midi message: note on");
 
                         if let Some(challenge) = &mut self.challenge {
+                            self.piano.set_key_state(key, piano::KeyState::Pressed);
+
                             if challenge.validator.validate(key) {
                                 tracing::info!(?key, "correct key");
 
@@ -128,6 +139,8 @@ impl State {
                     if let Ok(key) = Key::try_from_midi(key) {
                         tracing::info!(?key, ?vel, "midi message: note off");
 
+                        self.piano.set_key_state(key, piano::KeyState::Released);
+
                         if let Some(challenge) = &mut self.challenge {
                             if !challenge.validator.required(key) {
                                 challenge.sheet.remove_note(key);
@@ -149,21 +162,19 @@ impl State {
     pub fn view<'a>(&'a self, _: &'a App) -> Element<'a, Message> {
         if self.initialized {
             let hint: Element<'a, Message> = if let Some(hint) = &self.hint {
-                widget::svg(hint.clone()).into()
+                widget::svg(hint.clone())
+                    .height(Length::Fixed(500.))
+                    .width(Length::Fill)
+                    .into()
             } else {
                 widget::text("loading...").into()
             };
 
-            widget::column![
-                hint,
-                widget::button("Next").on_press(Message::AdvanceChallenge),
-                widget::button("Finish").on_press(Message::StateTransition(
-                    StateTransition::GameFinished(GameResults {
-                        settings: self.settings.clone()
-                    })
-                ))
-            ]
-            .into()
+            let piano = Container::new(self.piano.view())
+                .height(Length::Fixed(100.))
+                .width(Length::Fill);
+
+            widget::column![hint, piano,].into()
         } else {
             widget::column![widget::text("connecting input...")].into()
         }
@@ -175,6 +186,19 @@ impl State {
         } else {
             Subscription::run(input::connection_worker)
         }
+    }
+
+    pub fn menu_view<'a>(&'a self, _: &'a App) -> Element<'a, Message> {
+        widget::row![
+            widget::button("Next").on_press(Message::AdvanceChallenge),
+            widget::button("Finish").on_press(Message::StateTransition(
+                StateTransition::GameFinished(GameResults {
+                    settings: self.settings.clone()
+                })
+            ))
+        ]
+        .spacing(20.)
+        .into()
     }
 
     fn clef_split(&self) -> Key {

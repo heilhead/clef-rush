@@ -8,6 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 iced = { git = "https://github.com/iced-rs/iced.git", rev = "d1e936f", default-features = false, features = [
+    "canvas",
     "web-colors",
     "auto-detect-theme",
     "wgpu",

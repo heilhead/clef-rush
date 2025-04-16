@@ -34,4 +34,8 @@ impl State {
     pub fn subscription<'a>(&'a self, _: &'a App) -> Subscription<Message> {
         Subscription::none()
     }
+
+    pub fn menu_view<'a>(&'a self, _: &'a App) -> Element<'a, Message> {
+        widget::row![].into()
+    }
 }

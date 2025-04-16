@@ -1,4 +1,6 @@
-use {derive_more::Display, midly::num::u7};
+use {derive_more::Display, midly::num::u7, std::ops::RangeInclusive};
+
+const KEY_RANGE_88: RangeInclusive<u8> = 21..=108;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -45,7 +47,25 @@ impl KeyPos {
         }
     }
 
-    pub fn is_neutral(&self) -> bool {
+    /// Position within the octave.
+    pub fn oct_pos(&self) -> usize {
+        match self {
+            Self::C => 0,
+            Self::CSharp => 0,
+            Self::D => 1,
+            Self::DSharp => 1,
+            Self::E => 2,
+            Self::F => 3,
+            Self::FSharp => 2,
+            Self::G => 4,
+            Self::GSharp => 3,
+            Self::A => 5,
+            Self::ASharp => 4,
+            Self::B => 6,
+        }
+    }
+
+    pub fn is_natural(&self) -> bool {
         !self.is_sharp()
     }
 
@@ -95,15 +115,31 @@ pub struct Key {
 }
 
 impl Key {
-    // Position of `C0`.
+    // Position of `C0`, as we're not interested in `-1` octave.
     const OFFSET: u8 = 12;
 
     pub const fn new(pos: KeyPos, oct: u8) -> Self {
         Self { pos, oct }
     }
 
+    pub fn is_natural(&self) -> bool {
+        self.pos.is_natural()
+    }
+
+    pub fn is_sharp(&self) -> bool {
+        self.pos.is_sharp()
+    }
+
+    pub fn prev(&self) -> Option<Key> {
+        Self::try_from_midi(self.to_midi() - 1.into()).ok()
+    }
+
+    pub fn next(&self) -> Option<Key> {
+        Self::try_from_midi(self.to_midi() + 1.into()).ok()
+    }
+
     pub fn try_from_midi(key: u7) -> Result<Self, Error> {
-        if is_valid_midi_key(key) {
+        if is_valid_key(key) {
             let key = key.as_int() - Self::OFFSET;
 
             Ok(Self {
@@ -120,6 +156,74 @@ impl Key {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Keyboard {
+    range: RangeInclusive<u8>,
+}
+
+impl Keyboard {
+    fn new(range: RangeInclusive<u8>) -> Self {
+        Self { range }
+    }
+
+    pub fn standard_88_key() -> Self {
+        Self::new(KEY_RANGE_88)
+    }
+
+    pub fn first(&self) -> Key {
+        Key::try_from_midi((*self.range.start()).into()).unwrap()
+    }
+
+    pub fn last(&self) -> Key {
+        Key::try_from_midi((*self.range.end()).into()).unwrap()
+    }
+
+    pub fn num_keys(&self) -> usize {
+        (self.range.end() - self.range.start()) as usize + 1
+    }
+
+    pub fn num_natural_keys(&self) -> usize {
+        self.iter_natural_keys().count()
+    }
+
+    pub fn num_sharp_keys(&self) -> usize {
+        self.iter_sharp_keys().count()
+    }
+
+    pub fn iter_keys(&self) -> impl Iterator<Item = Key> {
+        range(&self.first(), &self.last())
+    }
+
+    pub fn iter_natural_keys(&self) -> impl Iterator<Item = Key> {
+        self.iter_keys().filter(Key::is_natural)
+    }
+
+    pub fn iter_sharp_keys(&self) -> impl Iterator<Item = Key> {
+        self.iter_keys().filter(Key::is_sharp)
+    }
+
+    pub fn offset(&self, key: &Key) -> usize {
+        let midi_code = key.to_midi().as_int();
+        (midi_code - *self.range.start() as u8) as usize
+    }
+
+    pub fn natural_index(&self, key: &Key) -> Option<usize> {
+        let first_key = self.first();
+
+        if !key.is_natural() || *key < first_key {
+            return None;
+        }
+
+        let oct_diff = (key.oct - first_key.oct) as usize;
+
+        Some(if oct_diff == 0 {
+            key.pos.oct_pos() - first_key.pos.oct_pos()
+        } else {
+            key.pos.oct_pos() + oct_diff * 7 - first_key.pos.oct_pos()
+        })
+    }
+}
+
 impl PartialOrd<Key> for Key {
     fn partial_cmp(&self, other: &Key) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
@@ -133,7 +237,7 @@ impl Ord for Key {
 }
 
 /// Returns an iterator for range `start..=end`.
-pub fn range(start: &Key, end: &Key) -> impl Iterator<Item = Key> {
+pub fn range(start: &Key, end: &Key) -> impl Iterator<Item = Key> + use<> {
     let start = start.to_midi().as_int();
     let end = end.to_midi().as_int();
     (start..=end).map(|key| Key::try_from_midi(key.into()).unwrap())
@@ -141,8 +245,8 @@ pub fn range(start: &Key, end: &Key) -> impl Iterator<Item = Key> {
 
 /// Checks whether the key code is in the valid range for a stadnard 88-key
 /// piano (`21..=108`).
-pub fn is_valid_midi_key(key: u7) -> bool {
-    (21..=108).contains(&key.as_int())
+pub fn is_valid_key(key: u7) -> bool {
+    KEY_RANGE_88.contains(&key.as_int())
 }
 
 #[cfg(test)]
@@ -168,18 +272,36 @@ mod test {
             oct: 1
         });
 
-        assert!(!is_valid_midi_key(20.into()));
-        assert!(!is_valid_midi_key(109.into()));
-        assert!(is_valid_midi_key(21.into()));
-        assert!(is_valid_midi_key(108.into()));
+        assert!(!is_valid_key(20.into()));
+        assert!(!is_valid_key(109.into()));
+        assert!(is_valid_key(21.into()));
+        assert!(is_valid_key(108.into()));
 
         for key in 0..127u8 {
-            if is_valid_midi_key(key.into()) {
+            if is_valid_key(key.into()) {
                 let parsed = Key::try_from_midi(key.into()).unwrap();
                 assert_eq!(key, parsed.to_midi());
             } else {
                 assert!(Key::try_from_midi(key.into()).is_err())
             }
         }
+
+        assert_eq!(KeyPos::ASharp.oct(0).prev(), Some(KeyPos::A.oct(0)));
+        assert_eq!(KeyPos::ASharp.oct(0).next(), Some(KeyPos::B.oct(0)));
+        assert_eq!(KeyPos::B.oct(0).next(), Some(KeyPos::C.oct(1)));
+    }
+
+    #[wasm_bindgen_test]
+    fn keyboard() {
+        let kbd = Keyboard::standard_88_key();
+        assert_eq!(kbd.num_keys(), 88);
+        assert_eq!(kbd.num_sharp_keys(), 36);
+        assert_eq!(kbd.num_natural_keys(), 52);
+        assert_eq!(kbd.offset(&KeyPos::A.oct(0)), 0);
+        assert_eq!(kbd.offset(&KeyPos::C.oct(8)), 87);
+        assert_eq!(kbd.natural_index(&KeyPos::A.oct(0)), Some(0));
+        assert_eq!(kbd.natural_index(&KeyPos::C.oct(1)), Some(2));
+        assert_eq!(kbd.natural_index(&KeyPos::C.oct(4)), Some(23));
+        assert_eq!(kbd.natural_index(&KeyPos::C.oct(8)), Some(51));
     }
 }

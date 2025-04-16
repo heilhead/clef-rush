@@ -125,7 +125,17 @@ impl App {
             .font(Font::Title)
             .shaping(Shaping::Advanced);
 
-        let header = widget::row![title].spacing(20).align_y(Vertical::Center);
+        let menu = match &self.state {
+            State::Loading(state) => state.menu_view(self),
+            State::MainMenu(state) => state.menu_view(self),
+            State::GameActive(state) => state.menu_view(self),
+            State::GameFinished(state) => state.menu_view(self),
+        };
+
+        let header = widget::row![title, widget::horizontal_space(), menu]
+            .spacing(20)
+            .align_y(Vertical::Center)
+            .width(Length::Fill);
 
         let content = match &self.state {
             State::Loading(state) => state.view(self),
@@ -154,7 +164,7 @@ impl App {
     }
 
     pub fn theme(&self) -> Theme {
-        Theme::CatppuccinLatte
+        Theme::Light
     }
 }
 
