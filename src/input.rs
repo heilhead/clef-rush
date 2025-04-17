@@ -16,6 +16,7 @@ use {
     },
     midir::MidiInputConnection,
     midly::{MidiMessage, live::LiveEvent, num::u7},
+    serde::{Deserialize, Serialize},
     tap::TapFallible as _,
 };
 
@@ -42,7 +43,17 @@ struct ConnectEvent {
     resp: oneshot::Sender<Result<(), Error>>,
 }
 
-#[derive(Default, Display, Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Display, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Device {
+    #[default]
+    #[display("On-Screen Keyboard")]
+    Virtual,
+
+    #[display("{}", _0)]
+    Midi(PortDescriptor),
+}
+
+#[derive(Default, Display, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[display("{}", name)]
 pub struct PortDescriptor {
     id: String,

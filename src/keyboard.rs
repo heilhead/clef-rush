@@ -47,22 +47,21 @@ impl KeyPos {
         }
     }
 
-    /// Position within the octave.
-    pub fn oct_pos(&self) -> usize {
+    pub fn natural_idx(&self) -> Option<usize> {
         match self {
-            Self::C => 0,
-            Self::CSharp => 0,
-            Self::D => 1,
-            Self::DSharp => 1,
-            Self::E => 2,
-            Self::F => 3,
-            Self::FSharp => 2,
-            Self::G => 4,
-            Self::GSharp => 3,
-            Self::A => 5,
-            Self::ASharp => 4,
-            Self::B => 6,
+            Self::C => Some(0),
+            Self::D => Some(1),
+            Self::E => Some(2),
+            Self::F => Some(3),
+            Self::G => Some(4),
+            Self::A => Some(5),
+            Self::B => Some(6),
+            _ => None,
         }
+    }
+
+    pub fn scale_idx(&self) -> usize {
+        *self as usize
     }
 
     pub fn is_natural(&self) -> bool {
@@ -130,14 +129,6 @@ impl Key {
         self.pos.is_sharp()
     }
 
-    pub fn prev(&self) -> Option<Key> {
-        Self::try_from_midi(self.to_midi() - 1.into()).ok()
-    }
-
-    pub fn next(&self) -> Option<Key> {
-        Self::try_from_midi(self.to_midi() + 1.into()).ok()
-    }
-
     pub fn try_from_midi(key: u7) -> Result<Self, Error> {
         if is_valid_key(key) {
             let key = key.as_int() - Self::OFFSET;
@@ -200,27 +191,6 @@ impl Keyboard {
 
     pub fn iter_sharp_keys(&self) -> impl Iterator<Item = Key> {
         self.iter_keys().filter(Key::is_sharp)
-    }
-
-    pub fn offset(&self, key: &Key) -> usize {
-        let midi_code = key.to_midi().as_int();
-        (midi_code - *self.range.start() as u8) as usize
-    }
-
-    pub fn natural_index(&self, key: &Key) -> Option<usize> {
-        let first_key = self.first();
-
-        if !key.is_natural() || *key < first_key {
-            return None;
-        }
-
-        let oct_diff = (key.oct - first_key.oct) as usize;
-
-        Some(if oct_diff == 0 {
-            key.pos.oct_pos() - first_key.pos.oct_pos()
-        } else {
-            key.pos.oct_pos() + oct_diff * 7 - first_key.pos.oct_pos()
-        })
     }
 }
 
@@ -285,10 +255,6 @@ mod test {
                 assert!(Key::try_from_midi(key.into()).is_err())
             }
         }
-
-        assert_eq!(KeyPos::ASharp.oct(0).prev(), Some(KeyPos::A.oct(0)));
-        assert_eq!(KeyPos::ASharp.oct(0).next(), Some(KeyPos::B.oct(0)));
-        assert_eq!(KeyPos::B.oct(0).next(), Some(KeyPos::C.oct(1)));
     }
 
     #[wasm_bindgen_test]
@@ -297,11 +263,5 @@ mod test {
         assert_eq!(kbd.num_keys(), 88);
         assert_eq!(kbd.num_sharp_keys(), 36);
         assert_eq!(kbd.num_natural_keys(), 52);
-        assert_eq!(kbd.offset(&KeyPos::A.oct(0)), 0);
-        assert_eq!(kbd.offset(&KeyPos::C.oct(8)), 87);
-        assert_eq!(kbd.natural_index(&KeyPos::A.oct(0)), Some(0));
-        assert_eq!(kbd.natural_index(&KeyPos::C.oct(1)), Some(2));
-        assert_eq!(kbd.natural_index(&KeyPos::C.oct(4)), Some(23));
-        assert_eq!(kbd.natural_index(&KeyPos::C.oct(8)), Some(51));
     }
 }

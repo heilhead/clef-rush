@@ -1,5 +1,5 @@
 use {
-    super::{App, GameResults, GameSettings, Message},
+    super::{App, Font, GameConfig, Message},
     crate::{
         app::StateTransition,
         input::{self, Connector},
@@ -12,6 +12,7 @@ use {
         Length,
         Subscription,
         Task,
+        alignment,
         widget::{self, Container},
     },
     midly::MidiMessage,
@@ -23,7 +24,7 @@ use {
 mod sheet;
 
 pub struct State {
-    settings: GameSettings,
+    settings: GameConfig,
     initialized: bool,
     input: Option<Connector>,
     range_treble: Vec<Key>,
@@ -34,7 +35,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(settings: GameSettings) -> Self {
+    pub fn new(settings: GameConfig) -> Self {
         let mut range_treble = keyboard::range(&KeyPos::B.oct(3), &KeyPos::C.oct(5))
             .filter(|key| key.pos.is_natural())
             .collect::<Vec<_>>();
@@ -58,31 +59,29 @@ impl State {
     }
 
     pub fn init(&mut self) -> Task<Message> {
-        if super::USE_MOCK_INPUT {
-            Task::done(Message::Ready)
-        } else {
-            Task::none()
-        }
+        Task::none()
     }
 
     pub fn update(&mut self, event: Message) -> Task<Message> {
         match event {
             Message::InputWorkerReady(connector) => {
                 self.input = Some(connector.clone());
-                let port = self.settings.input_port.clone();
+                let device = self.settings.input_device.clone();
 
-                return Task::future(async move {
-                    let result = connector.connect(port).await;
+                return match device {
+                    input::Device::Virtual => Task::done(Message::Ready),
 
-                    match result {
-                        Ok(_) => Message::Ready,
+                    input::Device::Midi(port) => Task::future(async move {
+                        match connector.connect(port).await {
+                            Ok(_) => Message::Ready,
 
-                        Err(err) => {
-                            tracing::warn!(?err, "failed to connect input port");
-                            StateTransition::MainMenu.into()
+                            Err(err) => {
+                                tracing::warn!(?err, "failed to connect input port");
+                                StateTransition::MainMenu.into()
+                            }
                         }
-                    }
-                });
+                    }),
+                };
             }
 
             Message::Ready => {
@@ -160,45 +159,58 @@ impl State {
     }
 
     pub fn view<'a>(&'a self, _: &'a App) -> Element<'a, Message> {
-        if self.initialized {
+        let header = widget::row![
+            widget::text(super::TITLE).size(36).font(Font::Title),
+            widget::horizontal_space(),
+            widget::button("Next").on_press(Message::AdvanceChallenge),
+            widget::button("Main Menu")
+                .on_press(Message::StateTransition(StateTransition::MainMenu))
+        ]
+        .spacing(20)
+        .align_y(alignment::Vertical::Center)
+        .width(Length::Fill);
+
+        let content = if self.initialized {
             let hint: Element<'a, Message> = if let Some(hint) = &self.hint {
                 widget::svg(hint.clone())
                     .height(Length::Fixed(500.))
                     .width(Length::Fill)
                     .into()
             } else {
-                widget::text("loading...").into()
+                widget::text("Loading...").into()
             };
 
             let piano = Container::new(self.piano.view())
-                .height(Length::Fixed(100.))
+                .height(Length::Fixed(150.))
                 .width(Length::Fill);
 
-            widget::column![hint, piano,].into()
+            widget::column![
+                widget::vertical_space(),
+                hint,
+                widget::vertical_space(),
+                piano
+            ]
+            .width(Length::Fill)
         } else {
-            widget::column![widget::text("connecting input...")].into()
-        }
+            widget::column![
+                widget::vertical_space(),
+                widget::text("Connecting input..."),
+                widget::vertical_space(),
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(alignment::Horizontal::Center)
+        };
+
+        widget::column![header, content]
+            .spacing(10)
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .into()
     }
 
     pub fn subscription<'a>(&'a self, _: &'a App) -> Subscription<Message> {
-        if super::USE_MOCK_INPUT {
-            input::mock::subscription()
-        } else {
-            Subscription::run(input::connection_worker)
-        }
-    }
-
-    pub fn menu_view<'a>(&'a self, _: &'a App) -> Element<'a, Message> {
-        widget::row![
-            widget::button("Next").on_press(Message::AdvanceChallenge),
-            widget::button("Finish").on_press(Message::StateTransition(
-                StateTransition::GameFinished(GameResults {
-                    settings: self.settings.clone()
-                })
-            ))
-        ]
-        .spacing(20.)
-        .into()
+        Subscription::run(input::connection_worker)
     }
 
     fn clef_split(&self) -> Key {

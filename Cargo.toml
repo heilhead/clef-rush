@@ -50,6 +50,9 @@ rand = { version = "0.9", default-features = false, features = [
     "thread_rng",
 ] }
 smallvec = "1.15"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+gloo-storage = "0.3"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

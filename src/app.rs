@@ -1,21 +1,11 @@
 use {
-    crate::{
-        input::{self, PortDescriptor},
-        verovio,
-    },
-    derive_more::From,
-    iced::{
-        Color,
-        Element,
-        Length,
-        Subscription,
-        Task,
-        Theme,
-        alignment::Vertical,
-        font,
-        widget::{self, text::Shaping},
-    },
+    crate::{input, verovio},
+    derive_more::{Display, From},
+    gloo_storage::Storage as _,
+    iced::{Color, Element, Length, Subscription, Task, Theme, font, widget},
     midly::MidiMessage,
+    serde::{Deserialize, Serialize},
+    tap::TapFallible as _,
 };
 
 mod game_active;
@@ -23,23 +13,84 @@ mod game_finished;
 mod loading;
 mod main_menu;
 
-const USE_MOCK_INPUT: bool = true;
 const TITLE: &str = "Clef Rush";
+const EXPLAIN_UI: bool = false;
 
-#[derive(Debug, Clone)]
-pub struct GameSettings {
-    input_port: input::PortDescriptor,
+#[derive(Default, Display, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OctaveRange {
+    #[default]
+    #[display("None")]
+    None,
+
+    #[display("{}", _0)]
+    Fixed(u8),
+
+    #[display("All")]
+    All,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Clef {
+    Treble,
+    Bass,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameConfig {
+    pub input_device: input::Device,
+    pub treble: ClefConfig,
+    pub bass: ClefConfig,
+}
+
+impl GameConfig {
+    const STORAGE_KEY: &str = "game-config";
+
+    pub fn load() -> Self {
+        gloo_storage::LocalStorage::get(Self::STORAGE_KEY)
+            .tap_err(|err| {
+                tracing::info!(?err, "failed to load game config");
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn store(&self) {
+        let _ = gloo_storage::LocalStorage::set(Self::STORAGE_KEY, self).tap_err(|err| {
+            tracing::info!(?err, "failed to store game config");
+        });
+    }
+}
+
+impl Default for GameConfig {
+    fn default() -> Self {
+        Self {
+            input_device: input::Device::Virtual,
+            treble: ClefConfig {
+                range: OctaveRange::Fixed(2),
+                sharp_keys: false,
+            },
+            bass: ClefConfig {
+                range: OctaveRange::Fixed(2),
+                sharp_keys: false,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClefConfig {
+    pub range: OctaveRange,
+    pub sharp_keys: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct GameResults {
-    settings: GameSettings,
+    settings: GameConfig,
 }
 
 #[derive(Debug, Clone)]
 pub enum StateTransition {
     MainMenu,
-    GameActive(GameSettings),
+    GameActive(GameConfig),
     GameFinished(GameResults),
 }
 
@@ -68,7 +119,9 @@ pub struct App {
 #[derive(From, Debug, Clone)]
 pub enum Message {
     StateTransition(StateTransition),
-    SelectInputPort(PortDescriptor),
+    SelectInputPort(input::Device),
+    SelectOctaveRange { clef: Clef, range: OctaveRange },
+    ToggleSharpKeys { clef: Clef, enabled: bool },
     RefreshDeviceList,
     InputEvent(#[from] MidiMessage),
     InputWorkerReady(input::Connector),
@@ -120,23 +173,6 @@ impl App {
     }
 
     pub fn view(&self) -> Element<Message> {
-        let title = widget::text(TITLE)
-            .size(36)
-            .font(Font::Title)
-            .shaping(Shaping::Advanced);
-
-        let menu = match &self.state {
-            State::Loading(state) => state.menu_view(self),
-            State::MainMenu(state) => state.menu_view(self),
-            State::GameActive(state) => state.menu_view(self),
-            State::GameFinished(state) => state.menu_view(self),
-        };
-
-        let header = widget::row![title, widget::horizontal_space(), menu]
-            .spacing(20)
-            .align_y(Vertical::Center)
-            .width(Length::Fill);
-
         let content = match &self.state {
             State::Loading(state) => state.view(self),
             State::MainMenu(state) => state.view(self),
@@ -144,14 +180,17 @@ impl App {
             State::GameFinished(state) => state.view(self),
         };
 
-        let res: Element<_> = widget::column![header, content]
-            .spacing(10)
+        let res: Element<_> = widget::column![content]
             .padding(20)
             .height(Length::Fill)
             .width(Length::Fill)
             .into();
 
-        res.explain(Color::BLACK)
+        if EXPLAIN_UI {
+            res.explain(Color::BLACK)
+        } else {
+            res
+        }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
