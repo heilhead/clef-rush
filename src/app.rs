@@ -1,5 +1,9 @@
 use {
-    crate::{input, verovio},
+    crate::{
+        input,
+        keyboard::{self, Key, KeyPos},
+        verovio,
+    },
     derive_more::{Display, From},
     gloo_storage::Storage as _,
     iced::{Color, Element, Length, Subscription, Task, Theme, font, widget},
@@ -29,7 +33,7 @@ pub enum OctaveRange {
     All,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Clef {
     Treble,
     Bass,
@@ -65,10 +69,12 @@ impl Default for GameConfig {
         Self {
             input_device: input::Device::Virtual,
             treble: ClefConfig {
+                clef: Clef::Treble,
                 range: OctaveRange::Fixed(2),
                 sharp_keys: false,
             },
             bass: ClefConfig {
+                clef: Clef::Bass,
                 range: OctaveRange::Fixed(2),
                 sharp_keys: false,
             },
@@ -78,8 +84,35 @@ impl Default for GameConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClefConfig {
+    pub clef: Clef,
     pub range: OctaveRange,
     pub sharp_keys: bool,
+}
+
+impl ClefConfig {
+    pub fn to_key_range(&self) -> Option<Vec<Key>> {
+        let (start, end) = match (self.clef, self.range) {
+            (Clef::Treble, OctaveRange::Fixed(num)) if num <= 3 => {
+                (KeyPos::C.oct(4 - num), KeyPos::B.oct(3))
+            }
+
+            (Clef::Treble, OctaveRange::All) => (KeyPos::A.oct(0), KeyPos::B.oct(3)),
+
+            (Clef::Bass, OctaveRange::Fixed(num)) if num <= 3 => {
+                (KeyPos::C.oct(4), KeyPos::B.oct(4 + num))
+            }
+
+            (Clef::Bass, OctaveRange::All) => (KeyPos::C.oct(4), KeyPos::C.oct(8)),
+
+            _ => return None,
+        };
+
+        let range = keyboard::range(&start, &end)
+            .filter(|key| self.sharp_keys || key.is_natural())
+            .collect();
+
+        Some(range)
+    }
 }
 
 #[derive(Debug, Clone)]

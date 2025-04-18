@@ -3,7 +3,7 @@ use {
     crate::{
         app::StateTransition,
         input::{self, Connector},
-        keyboard::{self, Key, KeyPos},
+        keyboard::{self, Key, KeyPos, Keyboard},
         piano::{self, Piano},
         util,
     },
@@ -24,30 +24,23 @@ use {
 mod sheet;
 
 pub struct State {
-    settings: GameConfig,
+    config: GameConfig,
     initialized: bool,
     input: Option<Connector>,
-    range_treble: Vec<Key>,
-    range_bass: Vec<Key>,
+    range_treble: Option<Vec<Key>>,
+    range_bass: Option<Vec<Key>>,
     challenge: Option<Challenge>,
     hint: Option<widget::svg::Handle>,
     piano: Piano,
 }
 
 impl State {
-    pub fn new(settings: GameConfig) -> Self {
-        let mut range_treble = keyboard::range(&KeyPos::B.oct(3), &KeyPos::C.oct(5))
-            .filter(|key| key.pos.is_natural())
-            .collect::<Vec<_>>();
-        range_treble.sort();
-
-        let mut range_bass = keyboard::range(&KeyPos::C.oct(2), &KeyPos::A.oct(3))
-            .filter(|key| key.pos.is_natural())
-            .collect::<Vec<_>>();
-        range_bass.sort();
+    pub fn new(config: GameConfig) -> Self {
+        let range_treble = config.treble.to_key_range();
+        let range_bass = config.treble.to_key_range();
 
         Self {
-            settings,
+            config,
             initialized: false,
             input: None,
             range_treble,
@@ -66,7 +59,7 @@ impl State {
         match event {
             Message::InputWorkerReady(connector) => {
                 self.input = Some(connector.clone());
-                let device = self.settings.input_device.clone();
+                let device = self.config.input_device.clone();
 
                 return match device {
                     input::Device::Virtual => Task::done(Message::Ready),
@@ -77,6 +70,7 @@ impl State {
 
                             Err(err) => {
                                 tracing::warn!(?err, "failed to connect input port");
+                                // TODO: Reset input device selection.
                                 StateTransition::MainMenu.into()
                             }
                         }
@@ -214,11 +208,12 @@ impl State {
     }
 
     fn clef_split(&self) -> Key {
-        // TODO: Support separate treble/bass.
-        self.range_treble
-            .first()
-            .cloned()
-            .unwrap_or(KeyPos::C.oct(0))
+        let kbd = Keyboard::standard_88_key();
+        match (&self.range_treble, &self.range_bass) {
+            (None, Some(_)) => kbd.last(),
+            (Some(_), None) => kbd.first(),
+            _ => KeyPos::C.oct(4),
+        }
     }
 
     fn advance(&mut self) -> Task<Message> {
