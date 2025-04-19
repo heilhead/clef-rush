@@ -133,6 +133,7 @@ pub enum StateTransition {
     GameFinished(GameResults),
 }
 
+#[allow(clippy::large_enum_variant)]
 enum State {
     Loading(loading::State),
     MainMenu(main_menu::State),
@@ -198,17 +199,15 @@ impl App {
                     }
                 }
 
-                return self.state.init();
+                self.state.init()
             }
 
-            event => {
-                return match &mut self.state {
-                    State::Loading(state) => state.update(event),
-                    State::MainMenu(state) => state.update(event),
-                    State::GameActive(state) => state.update(event),
-                    State::GameFinished(state) => state.update(event),
-                };
-            }
+            event => match &mut self.state {
+                State::Loading(state) => state.update(event),
+                State::MainMenu(state) => state.update(event),
+                State::GameActive(state) => state.update(event),
+                State::GameFinished(state) => state.update(event),
+            },
         }
     }
 

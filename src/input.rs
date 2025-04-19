@@ -2,20 +2,17 @@ use {
     crate::app::Message,
     derive_more::Display,
     futures_util::stream,
-    iced::{
-        Subscription,
-        futures::{
-            SinkExt,
-            Stream,
-            StreamExt,
-            channel::{
-                mpsc::{self, UnboundedSender},
-                oneshot,
-            },
+    iced::futures::{
+        SinkExt,
+        Stream,
+        StreamExt,
+        channel::{
+            mpsc::{self, UnboundedSender},
+            oneshot,
         },
     },
     midir::MidiInputConnection,
-    midly::{MidiMessage, live::LiveEvent, num::u7},
+    midly::{MidiMessage, live::LiveEvent},
     serde::{Deserialize, Serialize},
     tap::TapFallible as _,
 };
@@ -179,36 +176,5 @@ fn process_event(stamp: u64, message: &[u8], out_tx: &UnboundedSender<Message>) 
 
     if let Some(event) = event {
         let _ = out_tx.unbounded_send(Message::InputEvent(event));
-    }
-}
-
-pub mod mock {
-    use {super::*, crate::keyboard::KeyPos, iced::keyboard::Key};
-
-    pub fn subscription() -> Subscription<Message> {
-        Subscription::batch([
-            iced::keyboard::on_key_press(|key, _| {
-                translate_key_note(key)
-                    .map(|key| MidiMessage::NoteOn { key, vel: 1.into() })
-                    .map(Message::InputEvent)
-            }),
-            iced::keyboard::on_key_release(|key, _| {
-                translate_key_note(key)
-                    .map(|key| MidiMessage::NoteOff { key, vel: 0.into() })
-                    .map(Message::InputEvent)
-            }),
-        ])
-    }
-
-    fn translate_key_note(key: Key) -> Option<u7> {
-        let base_offset = KeyPos::C.oct(4).to_midi().as_int() - 13;
-
-        match key {
-            Key::Character(code) => match code.chars().next() {
-                Some(code @ 'a'..='z') => Some((code as u8 - 'a' as u8 + base_offset).into()),
-                _ => None,
-            },
-            _ => None,
-        }
     }
 }

@@ -39,7 +39,9 @@ impl Sheet {
     }
 
     pub fn set_note_style(&mut self, key: Key, style: Style) {
-        self.notes.get_mut(&key).map(|note| note.style = style);
+        if let Some(note) = self.notes.get_mut(&key) {
+            note.style = style
+        }
     }
 
     pub fn render_hint_svg(&self) -> impl Future<Output = String> + use<> {
@@ -197,7 +199,7 @@ fn render_notes_mei(notes: &[Note]) -> String {
         let id = Id::generate();
         let mut chord = format!("<chord xml:id=\"{id}\" dur=\"1\">");
         for note in notes {
-            chord.push_str(&render_note_mei(&note));
+            chord.push_str(&render_note_mei(note));
         }
         chord.push_str("</chord>");
         chord

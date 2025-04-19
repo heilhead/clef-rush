@@ -88,7 +88,7 @@ impl State {
             let selector = widget::pick_list(
                 &self.input_devices[..],
                 Some(self.config.input_device.clone()),
-                |port| Message::SelectInputPort(port),
+                Message::SelectInputPort,
             )
             .width(col_width);
 

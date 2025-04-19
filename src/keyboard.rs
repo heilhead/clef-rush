@@ -69,10 +69,10 @@ impl KeyPos {
     }
 
     pub fn is_sharp(&self) -> bool {
-        match self {
-            Self::CSharp | Self::DSharp | Self::FSharp | Self::GSharp | Self::ASharp => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::CSharp | Self::DSharp | Self::FSharp | Self::GSharp | Self::ASharp
+        )
     }
 
     pub fn pitch_name(&self) -> &'static str {
