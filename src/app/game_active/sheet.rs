@@ -5,19 +5,26 @@ use {
     std::collections::HashMap,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Treble,
+    Bass,
+    Combined,
+}
+
 #[derive(Debug, Clone)]
 pub struct Sheet {
-    enable_landmarks: bool,
+    mode: Mode,
     clef_split: Key,
     notes: HashMap<Key, Note>,
 }
 
 impl Sheet {
-    pub fn new(enable_landmarks: bool, notes: &[Note], clef_split: Key) -> Self {
+    pub fn new(mode: Mode, notes: &[Note], clef_split: Key) -> Self {
         let notes = HashMap::from_iter(notes.iter().map(|note| (note.key, note.clone())));
 
         Self {
-            enable_landmarks,
+            mode,
             notes,
             clef_split,
         }
@@ -56,20 +63,26 @@ impl Sheet {
             )
         };
 
-        const TEMPLATE_NO_LANDMARKS: &str = include_str!("../../../resources/template.mei");
-        const TEMPLATE_LANDMARKS: &str = include_str!("../../../resources/template_landmarks.mei");
         const TREBLE_NOTES_PAT: &str = "{{treble_notes}}";
         const BASS_NOTES_PAT: &str = "{{bass_notes}}";
 
-        let template = if self.enable_landmarks {
-            TEMPLATE_LANDMARKS
-        } else {
-            TEMPLATE_NO_LANDMARKS
-        };
+        let mei = match self.mode {
+            Mode::Treble => include_str!("../../../resources/mei/treble.mei").replacen(
+                TREBLE_NOTES_PAT,
+                &treble_notes,
+                1,
+            ),
 
-        let mei = template
-            .replacen(TREBLE_NOTES_PAT, &treble_notes, 1)
-            .replacen(BASS_NOTES_PAT, &bass_notes, 1);
+            Mode::Bass => include_str!("../../../resources/mei/bass.mei").replacen(
+                BASS_NOTES_PAT,
+                &bass_notes,
+                1,
+            ),
+
+            Mode::Combined => include_str!("../../../resources/mei/combined.mei")
+                .replacen(TREBLE_NOTES_PAT, &treble_notes, 1)
+                .replacen(BASS_NOTES_PAT, &bass_notes, 1),
+        };
 
         let styles = format!("{treble_styles} {bass_styles}");
 

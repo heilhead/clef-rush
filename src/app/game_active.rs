@@ -1,5 +1,5 @@
 use {
-    super::{App, Font, GameConfig, Message},
+    super::{App, Config, Font, Message},
     crate::{
         app::StateTransition,
         input::{self, Connector},
@@ -7,6 +7,7 @@ use {
         piano::{self, Piano},
         util,
     },
+    gloo_storage::Storage as _,
     iced::{
         Element,
         Length,
@@ -17,14 +18,49 @@ use {
     },
     midly::MidiMessage,
     rand::seq::IndexedRandom,
+    serde::{Deserialize, Serialize},
     sheet::{Note, Sheet},
+    smallvec::SmallVec,
     std::{borrow::Cow, collections::HashSet},
+    tap::TapFallible as _,
 };
 
 mod sheet;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalConfig {
+    pub virtual_keyboard: bool,
+}
+
+impl Default for LocalConfig {
+    fn default() -> Self {
+        Self {
+            virtual_keyboard: true,
+        }
+    }
+}
+
+impl LocalConfig {
+    const STORAGE_KEY: &str = "ingame-config";
+
+    pub fn load() -> Self {
+        gloo_storage::LocalStorage::get(Self::STORAGE_KEY)
+            .tap_err(|err| {
+                tracing::info!(?err, "failed to load ingame local config");
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn store(&self) {
+        let _ = gloo_storage::LocalStorage::set(Self::STORAGE_KEY, self).tap_err(|err| {
+            tracing::info!(?err, "failed to store ingame local config");
+        });
+    }
+}
+
 pub struct State {
-    config: GameConfig,
+    config: Config,
+    local_config: LocalConfig,
     initialized: bool,
     input: Option<Connector>,
     range_treble: Option<Vec<Key>>,
@@ -35,12 +71,13 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(config: GameConfig) -> Self {
+    pub fn new(config: Config) -> Self {
         let range_treble = config.treble.to_key_range();
-        let range_bass = config.treble.to_key_range();
+        let range_bass = config.bass.to_key_range();
 
         Self {
             config,
+            local_config: LocalConfig::load(),
             initialized: false,
             input: None,
             range_treble,
@@ -90,6 +127,11 @@ impl State {
 
             Message::AdvanceChallenge => {
                 return self.advance();
+            }
+
+            Message::ToggleVirtualKeyboard => {
+                self.local_config.virtual_keyboard = !self.local_config.virtual_keyboard;
+                self.local_config.store();
             }
 
             Message::InputEvent(msg) => match msg {
@@ -156,7 +198,8 @@ impl State {
         let header = widget::row![
             widget::text(super::TITLE).size(36).font(Font::Title),
             widget::horizontal_space(),
-            widget::button("Next").on_press(Message::AdvanceChallenge),
+            widget::button("Toggle Keyboard").on_press(Message::ToggleVirtualKeyboard),
+            widget::button("Skip").on_press(Message::AdvanceChallenge),
             widget::button("Main Menu")
                 .on_press(Message::StateTransition(StateTransition::MainMenu))
         ]
@@ -165,7 +208,7 @@ impl State {
         .width(Length::Fill);
 
         let content = if self.initialized {
-            let hint: Element<'a, Message> = if let Some(hint) = &self.hint {
+            let hint: Element<_> = if let Some(hint) = &self.hint {
                 widget::svg(hint.clone())
                     .height(Length::Fixed(500.))
                     .width(Length::Fill)
@@ -174,17 +217,13 @@ impl State {
                 widget::text("Loading...").into()
             };
 
-            let piano = Container::new(self.piano.view())
-                .height(Length::Fixed(150.))
-                .width(Length::Fill);
-
-            widget::column![
-                widget::vertical_space(),
-                hint,
-                widget::vertical_space(),
-                piano
-            ]
-            .width(Length::Fill)
+            widget::column![widget::vertical_space(), hint, widget::vertical_space()]
+                .push_maybe(self.local_config.virtual_keyboard.then(|| {
+                    Container::new(self.piano.view())
+                        .height(Length::Fixed(150.))
+                        .width(Length::Fill)
+                }))
+                .width(Length::Fill)
         } else {
             widget::column![
                 widget::vertical_space(),
@@ -217,11 +256,25 @@ impl State {
     }
 
     fn advance(&mut self) -> Task<Message> {
-        self.challenge = None;
+        let choose_note = |range: &Vec<Key>| {
+            loop {
+                let key = range[..].choose(&mut rand::rng()).unwrap();
 
-        let treble_key = *self.range_treble[..].choose(&mut rand::rng()).unwrap();
-        let bass_key = *self.range_bass[..].choose(&mut rand::rng()).unwrap();
-        let notes = [treble_key.into(), bass_key.into()];
+                let is_repeated = self
+                    .challenge
+                    .as_ref()
+                    .map(|challenge| challenge.validator.required(*key))
+                    .unwrap_or(false);
+
+                if !is_repeated {
+                    break *key;
+                }
+            }
+        };
+
+        let treble = self.range_treble.as_ref().map(choose_note).map(Note::from);
+        let bass = self.range_bass.as_ref().map(choose_note).map(Note::from);
+        let notes = treble.into_iter().chain(bass).collect::<SmallVec<[_; 2]>>();
 
         self.challenge = Some(Challenge::new(&notes, self.clef_split()));
         self.update_hint()
@@ -254,11 +307,26 @@ pub struct Challenge {
 
 impl Challenge {
     fn new(notes: &[Note], clef_split: Key) -> Self {
-        let sheet = Sheet::new(false, notes, clef_split);
+        let mut treble_ntoes = false;
+        let mut bass_notes = false;
+
+        for note in notes {
+            if note.key >= clef_split {
+                treble_ntoes = true;
+            } else {
+                bass_notes = true;
+            }
+        }
+
+        let mode = match (treble_ntoes, bass_notes) {
+            (true, false) => sheet::Mode::Treble,
+            (false, true) => sheet::Mode::Bass,
+            _ => sheet::Mode::Combined,
+        };
 
         Self {
             validator: Validator::new(notes),
-            sheet,
+            sheet: Sheet::new(mode, notes, clef_split),
         }
     }
 }

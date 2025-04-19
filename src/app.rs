@@ -33,6 +33,12 @@ pub enum OctaveRange {
     All,
 }
 
+impl OctaveRange {
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Clef {
     Treble,
@@ -40,31 +46,31 @@ pub enum Clef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameConfig {
+pub struct Config {
     pub input_device: input::Device,
     pub treble: ClefConfig,
     pub bass: ClefConfig,
 }
 
-impl GameConfig {
-    const STORAGE_KEY: &str = "game-config";
+impl Config {
+    const STORAGE_KEY: &str = "global-config";
 
     pub fn load() -> Self {
         gloo_storage::LocalStorage::get(Self::STORAGE_KEY)
             .tap_err(|err| {
-                tracing::info!(?err, "failed to load game config");
+                tracing::info!(?err, "failed to load global config");
             })
             .unwrap_or_default()
     }
 
     pub fn store(&self) {
         let _ = gloo_storage::LocalStorage::set(Self::STORAGE_KEY, self).tap_err(|err| {
-            tracing::info!(?err, "failed to store game config");
+            tracing::info!(?err, "failed to store global config");
         });
     }
 }
 
-impl Default for GameConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             input_device: input::Device::Virtual,
@@ -93,13 +99,13 @@ impl ClefConfig {
     pub fn to_key_range(&self) -> Option<Vec<Key>> {
         let (start, end) = match (self.clef, self.range) {
             (Clef::Treble, OctaveRange::Fixed(num)) if num <= 3 => {
-                (KeyPos::C.oct(4 - num), KeyPos::B.oct(3))
+                (KeyPos::C.oct(4), KeyPos::B.oct(3 + num))
             }
 
             (Clef::Treble, OctaveRange::All) => (KeyPos::A.oct(0), KeyPos::B.oct(3)),
 
             (Clef::Bass, OctaveRange::Fixed(num)) if num <= 3 => {
-                (KeyPos::C.oct(4), KeyPos::B.oct(4 + num))
+                (KeyPos::C.oct(4 - num), KeyPos::B.oct(3))
             }
 
             (Clef::Bass, OctaveRange::All) => (KeyPos::C.oct(4), KeyPos::C.oct(8)),
@@ -117,13 +123,13 @@ impl ClefConfig {
 
 #[derive(Debug, Clone)]
 pub struct GameResults {
-    settings: GameConfig,
+    settings: Config,
 }
 
 #[derive(Debug, Clone)]
 pub enum StateTransition {
     MainMenu,
-    GameActive(GameConfig),
+    GameActive(Config),
     GameFinished(GameResults),
 }
 
@@ -160,6 +166,7 @@ pub enum Message {
     InputWorkerReady(input::Connector),
     Ready,
     AdvanceChallenge,
+    ToggleVirtualKeyboard,
     UpdateChallengeHint(widget::svg::Handle),
 }
 
@@ -258,7 +265,7 @@ impl Font {
     pub fn source(&self) -> &'static [u8] {
         match self {
             Self::Default => &[],
-            Self::Title => &include_bytes!("../fonts/stigmature/Stigmature.otf")[..],
+            Self::Title => &include_bytes!("../resources/fonts/stigmature/Stigmature.otf")[..],
         }
     }
 

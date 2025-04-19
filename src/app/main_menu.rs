@@ -1,5 +1,5 @@
 use {
-    super::{App, GameConfig, Message, OctaveRange, StateTransition},
+    super::{App, Config, Message, OctaveRange, StateTransition},
     crate::{
         app::{self, Clef, Font},
         input,
@@ -9,14 +9,14 @@ use {
 
 pub struct State {
     input_devices: Vec<input::Device>,
-    config: GameConfig,
+    config: Config,
 }
 
 impl State {
     pub fn new() -> Self {
         let mut state = Self {
             input_devices: Vec::new(),
-            config: GameConfig::load(),
+            config: Config::load(),
         };
         state.update_input_devices();
         state
@@ -149,10 +149,13 @@ impl State {
                 .width(Length::Fill)
                 .align_x(alignment::Horizontal::Center);
 
+            let is_form_valid =
+                !(self.config.treble.range.is_none() && self.config.bass.range.is_none());
+
             let btn = widget::button(label)
-                .on_press_with(|| {
+                .on_press_maybe(is_form_valid.then(|| {
                     Message::StateTransition(StateTransition::GameActive(self.config.clone()))
-                })
+                }))
                 .width(col_width);
 
             widget::row![widget::horizontal_space(), btn, widget::horizontal_space()]
