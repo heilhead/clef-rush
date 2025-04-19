@@ -8,3 +8,6 @@ no_spa = true
 no_autoreload = true
 tls_key_path = "dev/key.pem"
 tls_cert_path = "dev/cert.pem"
+
+[build]
+public_url = "/clef-rush/"
