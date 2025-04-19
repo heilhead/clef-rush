@@ -65,7 +65,8 @@ pub struct State {
     input: Option<Connector>,
     range_treble: Option<Vec<Key>>,
     range_bass: Option<Vec<Key>>,
-    challenge: Option<Challenge>,
+    curr_challenge: Option<Challenge>,
+    prev_challenge: Option<Challenge>,
     hint: Option<widget::svg::Handle>,
     piano: Piano,
 }
@@ -82,7 +83,8 @@ impl State {
             input: None,
             range_treble,
             range_bass,
-            challenge: None,
+            curr_challenge: None,
+            prev_challenge: None,
             hint: None,
             piano: Piano::new(keyboard::Keyboard::standard_88_key()),
         }
@@ -139,7 +141,7 @@ impl State {
                     if let Ok(key) = Key::try_from_midi(key) {
                         tracing::info!(?key, ?vel, "midi message: note on");
 
-                        if let Some(challenge) = &mut self.challenge {
+                        if let Some(challenge) = &mut self.curr_challenge {
                             self.piano.set_key_state(key, piano::KeyState::Pressed);
 
                             if challenge.validator.validate(key) {
@@ -156,7 +158,7 @@ impl State {
                                         }),
                                     ]);
 
-                                    self.challenge = None;
+                                    self.prev_challenge = self.curr_challenge.take();
                                     return tasks;
                                 }
                             } else {
@@ -176,7 +178,7 @@ impl State {
 
                         self.piano.set_key_state(key, piano::KeyState::Released);
 
-                        if let Some(challenge) = &mut self.challenge {
+                        if let Some(challenge) = &mut self.curr_challenge {
                             if !challenge.validator.required(key) {
                                 challenge.sheet.remove_note(key);
                                 return self.update_hint();
@@ -261,7 +263,7 @@ impl State {
                 let key = range[..].choose(&mut rand::rng()).unwrap();
 
                 let is_repeated = self
-                    .challenge
+                    .prev_challenge
                     .as_ref()
                     .map(|challenge| challenge.validator.required(*key))
                     .unwrap_or(false);
@@ -276,12 +278,12 @@ impl State {
         let bass = self.range_bass.as_ref().map(choose_note).map(Note::from);
         let notes = treble.into_iter().chain(bass).collect::<SmallVec<[_; 2]>>();
 
-        self.challenge = Some(Challenge::new(&notes, self.clef_split()));
+        self.curr_challenge = Some(Challenge::new(&notes, self.clef_split()));
         self.update_hint()
     }
 
     fn update_hint(&self) -> Task<Message> {
-        let Some(challenge) = &self.challenge else {
+        let Some(challenge) = &self.curr_challenge else {
             return Task::none();
         };
 
