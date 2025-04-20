@@ -205,9 +205,8 @@ impl App {
             }
 
             Message::ToggleFullscreen => {
-                let _ = util::toggle_fullscreen().tap_err(|err| {
-                    tracing::warn!(?err, "failed to enter fullscreen");
-                });
+                let _ = util::toggle_fullscreen()
+                    .tap_err(|err| tracing::warn!(?err, "failed to toggle fullscreen"));
 
                 Task::none()
             }
