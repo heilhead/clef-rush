@@ -42,7 +42,9 @@ impl State {
         let kbd_height = 150.;
         let kbd_width = 23.5 * kbd.num_natural_keys() as f32;
         let desired_aspect_ratio = kbd_width / kbd_height;
-        let bounds = self.bounds;
+        // Shrink the actual usable bounds a little bit to give space for the strokes
+        // outside of shape bounds.
+        let bounds = self.bounds.shrink(iced::Padding::new(2.));
         let widget_aspect_ratio = bounds.width / bounds.height;
 
         let (width, height) = if widget_aspect_ratio > desired_aspect_ratio {
@@ -51,7 +53,10 @@ impl State {
             (bounds.width, bounds.width / desired_aspect_ratio)
         };
 
-        self.translation = Vector::new((bounds.width - width) / 2., (bounds.height - height) / 2.);
+        self.translation = Vector::new(
+            (self.bounds.width - width) / 2.,
+            (self.bounds.height - height) / 2.,
+        );
         self.scale = Vector::new(width, height);
     }
 
@@ -243,7 +248,9 @@ impl canvas::Program<Message> for Piano {
         let mut frame = Frame::new(renderer, bounds.size());
 
         frame.with_save(|frame| {
-            frame.translate(state.translation);
+            // Add an extra pixel of offset when rendering natural keys to account for
+            // strokes being outside of the actual shape bounds.
+            frame.translate(state.translation - Vector::new(1., 1.));
             frame.scale_nonuniform(state.scale);
             frame.fill_rectangle(Point::ORIGIN, Size::new(1., 1.), Color::WHITE);
 
@@ -256,20 +263,16 @@ impl canvas::Program<Message> for Piano {
             }
         });
 
-        // TODO: Figure out why sharp keys need an extra 1px offset to align with
-        // natural keys.
-        frame.with_save(|frame| {
-            frame.translate(state.translation + Vector::new(1., 0.));
-            frame.scale_nonuniform(state.scale);
+        frame.translate(state.translation);
+        frame.scale_nonuniform(state.scale);
 
-            for key in &self.sharp_keys {
-                if self.is_pressed(&key.key) {
-                    frame.fill_rectangle(key.offset, key.size, pressed_fill);
-                } else {
-                    frame.fill_rectangle(key.offset, key.size, sharp_fill);
-                }
+        for key in &self.sharp_keys {
+            if self.is_pressed(&key.key) {
+                frame.fill_rectangle(key.offset, key.size, pressed_fill);
+            } else {
+                frame.fill_rectangle(key.offset, key.size, sharp_fill);
             }
-        });
+        }
 
         vec![frame.into_geometry()]
     }
