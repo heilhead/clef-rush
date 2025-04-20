@@ -200,6 +200,7 @@ impl State {
         let header = widget::row![
             widget::text(super::TITLE).size(36).font(Font::Title),
             widget::horizontal_space(),
+            widget::button("Toggle Fullscreen").on_press(Message::ToggleFullscreen),
             widget::button("Toggle Keyboard").on_press(Message::ToggleVirtualKeyboard),
             widget::button("Skip").on_press(Message::AdvanceChallenge),
             widget::button("Main Menu")

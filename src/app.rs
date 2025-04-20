@@ -2,6 +2,7 @@ use {
     crate::{
         input,
         keyboard::{self, Key, KeyPos},
+        util,
         verovio,
     },
     derive_more::{Display, From},
@@ -168,6 +169,7 @@ pub enum Message {
     Ready,
     AdvanceChallenge,
     ToggleVirtualKeyboard,
+    ToggleFullscreen,
     UpdateChallengeHint(widget::svg::Handle),
 }
 
@@ -200,6 +202,14 @@ impl App {
                 }
 
                 self.state.init()
+            }
+
+            Message::ToggleFullscreen => {
+                let _ = util::toggle_fullscreen().tap_err(|err| {
+                    tracing::warn!(?err, "failed to enter fullscreen");
+                });
+
+                Task::none()
             }
 
             event => match &mut self.state {

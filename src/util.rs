@@ -13,6 +13,38 @@ pub async fn sleep(delay: i32) {
         .unwrap();
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum FullscreenError {
+    #[error("No global `window` object")]
+    NoWindow,
+
+    #[error("No `document` object")]
+    NoDocument,
+
+    #[error("No `body` object")]
+    NoBody,
+
+    #[error("Failed to enter fullscreen: {0}")]
+    FailedToEnter(String),
+}
+
+pub fn toggle_fullscreen() -> Result<(), FullscreenError> {
+    let window = web_sys::window().ok_or(FullscreenError::NoWindow)?;
+    let document = window.document().ok_or(FullscreenError::NoDocument)?;
+    let body = document.body().ok_or(FullscreenError::NoBody)?;
+
+    if document.fullscreen_element().is_none() {
+        body.request_fullscreen().map_err(|err| {
+            FullscreenError::FailedToEnter(
+                err.as_string().unwrap_or_else(|| "<no data>".to_owned()),
+            )
+        })
+    } else {
+        document.exit_fullscreen();
+        Ok(())
+    }
+}
+
 pub struct DropMonitor {
     name: Cow<'static, str>,
 }
