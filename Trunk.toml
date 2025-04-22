@@ -1,13 +1,12 @@
 [serve]
-addresses = ["127.0.0.1", "192.168.68.61"]
-aliases = ["http://home-pc.ivan.local"]
+addresses = ["127.0.0.1"]
 port = 8080
 disable_address_lookup = true
 open = false
 no_spa = true
 no_autoreload = true
-tls_key_path = "dev/key.pem"
-tls_cert_path = "dev/cert.pem"
+# tls_key_path = "dev/key.pem"
+# tls_cert_path = "dev/cert.pem"
 
 [build]
 public_url = "/clef-rush/"
